@@ -1,0 +1,78 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.tniany.shiyu'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.tniany.shiyu'
+        minSdk 23
+        targetSdk 33
+        versionCode 25
+        versionName '0.7.2'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions { jvmTarget = '17' }
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+    defaultConfig {
+        buildConfigField 'String', 'OPEN_EVENT_URL', '"https://shiy.tniay.top/api/open"'
+        buildConfigField 'String', 'UPDATE_MANIFEST_URL', '"https://shiy.tniay.top/version.json"'
+        buildConfigField 'String', 'FEEDBACK_API_URL', '"https://shiy.tniay.top/api/feedback"'
+        buildConfigField 'String', 'FEEDBACK_PAGE_URL', '"https://shiy.tniay.top/internal/feedback-4d27c9"'
+    }
+    composeOptions { kotlinCompilerExtensionVersion '1.5.14' }
+
+    def keystoreProperties = new Properties()
+    def keystorePropertiesFile = rootProject.file('keystore.properties')
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+    }
+
+    signingConfigs {
+        release {
+            storeFile rootProject.file(keystoreProperties['storeFile'] ?: 'shiyu-release.jks')
+            storePassword keystoreProperties['storePassword'] ?: ''
+            keyAlias keystoreProperties['keyAlias'] ?: 'shiyu'
+            keyPassword keystoreProperties['keyPassword'] ?: ''
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.release
+        }
+        release {
+            minifyEnabled false
+            debuggable false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    lint {
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    def composeBom = platform('androidx.compose:compose-bom:2024.06.00')
+    implementation composeBom
+    implementation 'androidx.activity:activity-compose:1.9.1'
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'com.alphacephei:vosk-android:0.3.47'
+    implementation 'com.google.zxing:core:3.5.3'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+}

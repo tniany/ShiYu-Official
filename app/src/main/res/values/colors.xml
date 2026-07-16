@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="shiyu_bg">#F7F8F4</color>
+    <color name="shiyu_ink">#242825</color>
+    <color name="shiyu_muted">#68706A</color>
+    <color name="shiyu_primary">#C85C6F</color>
+    <color name="shiyu_primary_dark">#8C394A</color>
+    <color name="shiyu_surface">#FFFFFF</color>
+    <color name="shiyu_user_bubble">#FFD9DE</color>
+    <color name="shiyu_assistant_bubble">#FFFFFF</color>
+</resources>

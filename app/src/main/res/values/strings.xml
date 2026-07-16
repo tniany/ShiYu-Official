@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_context_accessibility_description">仅在你点击桌宠眼睛按钮时读取当前可见屏幕文字，并交给角色分析。密码字段不会读取。</string>
+    <string name="app_name">时遇</string>
+</resources>

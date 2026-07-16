@@ -1,0 +1,25 @@
+# Gradle
+.gradle/
+build/
+
+# Android
+local.properties
+keystore.properties
+shiyu-release.jks
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.ap_
+*.aab
+*.aar
+*.dex
+*.class
+
+# IDE
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
