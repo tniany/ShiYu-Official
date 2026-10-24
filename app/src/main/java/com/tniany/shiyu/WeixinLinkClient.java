@@ -291,14 +291,16 @@ final class WeixinLinkClient {
     return false;
   }
 
-  private static JSONObject baseInfo() throws Exception { return new JSONObject().put("channel_version", "2.4.6").put("bot_agent", "ShiYu/0.7.2"); }
+  private static JSONObject baseInfo() throws Exception { return new JSONObject().put("channel_version", "2.4.6").put("bot_agent", "ShiYu/" + BuildConfig.VERSION_NAME); }
   private static String tokenKey(String id) { return "bot_token_" + id; }
   private static String syncKey(String id) { return "weixin_link_sync_" + id; }
   private static JSONObject get(String base, String endpoint, int timeout) throws Exception { return readResponse(open(base, endpoint, "GET", "", timeout)); }
   private static JSONObject post(String base, String endpoint, JSONObject body, String token, int timeout) throws Exception {
     HttpURLConnection connection = open(base, endpoint, "POST", token, timeout); connection.setDoOutput(true);
-    try (OutputStream output = connection.getOutputStream()) { output.write(body.toString().getBytes(StandardCharsets.UTF_8)); }
-    return readResponse(connection);
+    try {
+      try (OutputStream output = connection.getOutputStream()) { output.write(body.toString().getBytes(StandardCharsets.UTF_8)); }
+      return readResponse(connection);
+    } finally { connection.disconnect(); }
   }
   private static HttpURLConnection open(String base, String endpoint, String method, String token, int timeout) throws Exception {
     HttpURLConnection connection = (HttpURLConnection) new URL(normalizeBase(base) + "/" + endpoint).openConnection();
@@ -311,8 +313,10 @@ final class WeixinLinkClient {
     return connection;
   }
   private static JSONObject readResponse(HttpURLConnection connection) throws Exception {
-    int code = connection.getResponseCode(); String raw = read(code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream()); connection.disconnect();
-    if (code < 200 || code >= 300) throw new IllegalStateException("微信连接 HTTP " + code); return raw.isEmpty() ? new JSONObject() : new JSONObject(raw);
+    try {
+      int code = connection.getResponseCode(); String raw = read(code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream());
+      if (code < 200 || code >= 300) throw new IllegalStateException("微信连接 HTTP " + code); return raw.isEmpty() ? new JSONObject() : new JSONObject(raw);
+    } finally { connection.disconnect(); }
   }
   private static String read(InputStream input) throws Exception {
     if (input == null) return ""; StringBuilder value = new StringBuilder();

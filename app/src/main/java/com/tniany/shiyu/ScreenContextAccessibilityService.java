@@ -15,8 +15,11 @@ public final class ScreenContextAccessibilityService extends AccessibilityServic
   static String captureVisibleText() {
     ScreenContextAccessibilityService service=active;
     if(service==null)return "";
+    if(!service.getSharedPreferences(MainActivity.PREF,MODE_PRIVATE)
+        .getBoolean("experimental_screen_context_enabled",false))return "";
+    CrashProtection.markFeatureActive(service,CrashProtection.FEATURE_SCREEN_CONTEXT);
     AccessibilityNodeInfo root=service.getRootInActiveWindow();
-    if(root==null)return "";
+    if(root==null){CrashProtection.clearFeatureActive(service,CrashProtection.FEATURE_SCREEN_CONTEXT);return "";}
     StringBuilder result=new StringBuilder();
     ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();
     HashSet<String> seen=new HashSet<>();
@@ -32,7 +35,7 @@ public final class ScreenContextAccessibilityService extends AccessibilityServic
         }
         if(node!=root)node.recycle();
       }
-    }finally{root.recycle();}
+    }finally{root.recycle();CrashProtection.clearFeatureActive(service,CrashProtection.FEATURE_SCREEN_CONTEXT);}
     return result.length()>6000?result.substring(0,6000):result.toString();
   }
 

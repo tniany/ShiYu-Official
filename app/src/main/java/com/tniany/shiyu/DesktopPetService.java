@@ -54,6 +54,7 @@ public final class DesktopPetService extends Service {
   private final ExecutorService replyExecutor = Executors.newSingleThreadExecutor();
   private WindowManager windowManager;
   private SharedPreferences prefs;
+  private SpeechEngine speech;
   private View petView;
   private View menuView;
   private View bubbleView;
@@ -74,6 +75,7 @@ public final class DesktopPetService extends Service {
   private Runnable bubbleDotsTask;
   private final Runnable messagePoll = new Runnable() {
     @Override public void run() {
+      CrashProtection.markFeatureActive(DesktopPetService.this, CrashProtection.FEATURE_DESKTOP_PET);
       pollForRoleMessage();
       handler.postDelayed(this, 2500L);
     }
@@ -83,6 +85,10 @@ public final class DesktopPetService extends Service {
     SharedPreferences prefs = context.getSharedPreferences(MainActivity.PREF, Context.MODE_PRIVATE);
     boolean allowed = Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(context);
     Intent intent = new Intent(context, DesktopPetService.class);
+    if (MainActivity.isDataRescueRequired(context)) {
+      context.stopService(intent);
+      return;
+    }
     if (prefs.getBoolean("experimental_desktop_pet_enabled", false) && allowed) {
       if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent);
       else context.startService(intent);
@@ -95,6 +101,18 @@ public final class DesktopPetService extends Service {
   public void onCreate() {
     super.onCreate();
     prefs = getSharedPreferences(MainActivity.PREF, MODE_PRIVATE);
+    if (MainActivity.isDataRescueRequired(this)) {
+      stopSelf();
+      return;
+    }
+    CrashProtection.markFeatureActive(this, CrashProtection.FEATURE_DESKTOP_PET);
+    speech = new SpeechEngine(this, prefs, new SecureStore(this), (speaking, text, error) -> {
+      if (!error.isEmpty()) {
+        Toast.makeText(this, error, Toast.LENGTH_SHORT).show();
+        if ("voice".equals(prefs.getString("desktop_pet_reply_mode", "both")) && text != null && !text.isEmpty())
+          showBubble(text, false);
+      }
+    });
     windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
     lastBubbleAt = prefs.getLong("desktop_pet_last_bubble_at", System.currentTimeMillis());
     startForeground(NOTIFICATION_ID, notification());
@@ -103,7 +121,8 @@ public final class DesktopPetService extends Service {
 
   @Override
   public int onStartCommand(Intent intent, int flags, int startId) {
-    if (!prefs.getBoolean("experimental_desktop_pet_enabled", false)
+    if (MainActivity.isDataRescueRequired(this)
+        || !prefs.getBoolean("experimental_desktop_pet_enabled", false)
         || (Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(this))) {
       stopSelf();
       return START_NOT_STICKY;
@@ -220,6 +239,8 @@ public final class DesktopPetService extends Service {
       petView.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(220).start();
     } catch (RuntimeException error) {
       prefs.edit().putBoolean("experimental_desktop_pet_enabled", false).apply();
+      DiagnosticLog.record(this, "desktop_pet_window", "error",
+          MainActivity.diagnosticSummary(error));
       stopSelf();
     }
   }
@@ -368,50 +389,140 @@ public final class DesktopPetService extends Service {
     if (petView == null || menuView != null) return;
     hideBubble();
     LinearLayout menu = new LinearLayout(this);
-    menu.setOrientation(LinearLayout.HORIZONTAL);
-    menu.setGravity(Gravity.CENTER);
-    menu.setPadding(dp(5), dp(5), dp(5), dp(5));
-    GradientDrawable background = rounded(Color.argb(235, 42, 43, 47), dp(18));
-    background.setStroke(dp(1), Color.argb(95, 255, 255, 255));
+    menu.setOrientation(LinearLayout.VERTICAL);
+    menu.setPadding(dp(9), dp(8), dp(9), dp(9));
+    GradientDrawable background = rounded(Color.argb(247, 35, 36, 40), dp(20));
+    background.setStroke(dp(1), Color.argb(80, 255, 255, 255));
     menu.setBackground(background);
-    menu.setElevation(dp(12));
-    addMenuButton(menu, "🍰", "投喂", () -> {
+    menu.setElevation(dp(18));
+
+    LinearLayout header = new LinearLayout(this);
+    header.setOrientation(LinearLayout.HORIZONTAL);
+    header.setGravity(Gravity.CENTER_VERTICAL);
+    header.setPadding(dp(7), 0, dp(2), 0);
+    TextView grip = new TextView(this);
+    grip.setText("⠿");
+    grip.setTextSize(20);
+    grip.setTextColor(Color.rgb(135, 205, 192));
+    grip.setGravity(Gravity.CENTER);
+    header.addView(grip, new LinearLayout.LayoutParams(dp(28), dp(44)));
+    LinearLayout heading = new LinearLayout(this);
+    heading.setOrientation(LinearLayout.VERTICAL);
+    heading.setGravity(Gravity.CENTER_VERTICAL);
+    TextView title = new TextView(this);
+    title.setText(roleName.isEmpty() ? "桌宠快捷面板" : roleName + " · 桌宠");
+    title.setTextSize(14);
+    title.setTextColor(Color.WHITE);
+    title.setSingleLine(true);
+    title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    TextView subtitle = new TextView(this);
+    subtitle.setText("快捷操作");
+    subtitle.setTextSize(10);
+    subtitle.setTextColor(Color.rgb(174, 178, 184));
+    heading.addView(title, new LinearLayout.LayoutParams(-1, -2));
+    heading.addView(subtitle, new LinearLayout.LayoutParams(-1, -2));
+    header.addView(heading, new LinearLayout.LayoutParams(0, -1, 1f));
+    TextView close = new TextView(this);
+    close.setText("×");
+    close.setTextSize(25);
+    close.setTextColor(Color.rgb(220, 221, 224));
+    close.setGravity(Gravity.CENTER);
+    close.setContentDescription("关闭桌宠菜单");
+    close.setBackground(rounded(Color.argb(30, 255, 255, 255), dp(12)));
+    close.setOnClickListener(view -> hideMenu());
+    header.addView(close, new LinearLayout.LayoutParams(dp(40), dp(40)));
+    header.setContentDescription("拖动桌宠快捷面板");
+    header.setOnTouchListener(new MenuDragTouchListener());
+    menu.addView(header, new LinearLayout.LayoutParams(-1, dp(52)));
+
+    View divider = new View(this);
+    divider.setBackgroundColor(Color.argb(42, 255, 255, 255));
+    LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(-1, dp(1));
+    dividerParams.setMargins(dp(5), dp(2), dp(5), dp(7));
+    menu.addView(divider, dividerParams);
+
+    LinearLayout firstRow = menuActionRow();
+    addMenuAction(firstRow, "🍰", "投喂", () -> {
       hideMenu();
       animatePet();
       requestRoleReply("我给你投喂了一份喜欢的小点心", "desktop_pet_feed");
     });
-    addMenuButton(menu, "✎", "快捷回复", () -> { hideMenu();showQuickReply(); });
-    addMenuButton(menu, "👀", "分析当前屏幕", () -> { hideMenu();analyzeCurrentScreen(); });
-    addMenuButton(menu, "💬", "返回聊天", () -> { hideMenu();openApp(chatId); });
-    addMenuButton(menu, "✕", "关闭桌宠", () -> {
+    addMenuAction(firstRow, "✎", "快捷回复", () -> { hideMenu();showQuickReply(); });
+    addMenuAction(firstRow, "◉", "分析屏幕", () -> { hideMenu();analyzeCurrentScreen(); });
+    menu.addView(firstRow, new LinearLayout.LayoutParams(-1, dp(76)));
+
+    LinearLayout secondRow = menuActionRow();
+    addMenuAction(secondRow, "💬", "打开聊天", () -> { hideMenu();openApp(chatId); });
+    addMenuAction(secondRow, "⚙", "桌宠设置", () -> { hideMenu();openPetSettings(); });
+    addMenuAction(secondRow, "↺", "重置位置", this::resetPetPosition);
+    menu.addView(secondRow, new LinearLayout.LayoutParams(-1, dp(76)));
+
+    TextView stop = new TextView(this);
+    stop.setText("关闭桌宠");
+    stop.setTextSize(12);
+    stop.setTextColor(Color.rgb(255, 188, 193));
+    stop.setGravity(Gravity.CENTER);
+    stop.setCompoundDrawablePadding(dp(6));
+    stop.setBackground(rounded(Color.argb(55, 226, 82, 96), dp(12)));
+    stop.setOnClickListener(view -> {
       prefs.edit().putBoolean("experimental_desktop_pet_enabled", false).apply();
       hideMenu();
       stopSelf();
     });
+    LinearLayout.LayoutParams stopParams = new LinearLayout.LayoutParams(-1, dp(42));
+    stopParams.setMargins(dp(4), dp(7), dp(4), 0);
+    menu.addView(stop, stopParams);
+
     menuView = menu;
-    menuParams = overlayParams(-2, dp(58));
+    menuParams = overlayParams(dp(304), -2);
     int displayWidth = getResources().getDisplayMetrics().widthPixels;
     int displayHeight = getResources().getDisplayMetrics().heightPixels;
-    menuParams.x = Math.max(0, Math.min(displayWidth - dp(286), petParams.x - dp(108)));
-    menuParams.y = Math.max(0, Math.min(displayHeight - dp(58), petParams.y - dp(66)));
+    int defaultX = Math.max(dp(6), Math.min(displayWidth - dp(310), petParams.x - dp(112)));
+    int defaultY = Math.max(dp(6), Math.min(displayHeight - dp(270), petParams.y - dp(226)));
+    menuParams.x = Math.max(dp(6), Math.min(displayWidth - dp(310), prefs.getInt("desktop_pet_menu_x", defaultX)));
+    menuParams.y = Math.max(dp(6), Math.min(displayHeight - dp(270), prefs.getInt("desktop_pet_menu_y", defaultY)));
     try {
       windowManager.addView(menuView, menuParams);
+      menuView.setAlpha(0f);
+      menuView.setScaleX(.94f);
+      menuView.setScaleY(.94f);
+      menuView.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(160).start();
     } catch (RuntimeException ignored) {
       menuView = null;
+      menuParams = null;
     }
   }
 
-  private void addMenuButton(LinearLayout parent, String symbol, String label, Runnable action) {
-    TextView button = new TextView(this);
-    button.setText(symbol);
-    button.setTextSize(23);
+  private LinearLayout menuActionRow() {
+    LinearLayout row = new LinearLayout(this);
+    row.setOrientation(LinearLayout.HORIZONTAL);
+    row.setGravity(Gravity.CENTER);
+    return row;
+  }
+
+  private void addMenuAction(LinearLayout parent, String symbol, String label, Runnable action) {
+    LinearLayout button = new LinearLayout(this);
+    button.setOrientation(LinearLayout.VERTICAL);
     button.setGravity(Gravity.CENTER);
     button.setContentDescription(label);
     if (Build.VERSION.SDK_INT >= 26) button.setTooltipText(label);
-    button.setBackground(rounded(Color.argb(36, 255, 255, 255), dp(13)));
+    button.setBackground(rounded(Color.argb(31, 255, 255, 255), dp(13)));
+    TextView icon = new TextView(this);
+    icon.setText(symbol);
+    icon.setTextSize(21);
+    icon.setTextColor(Color.WHITE);
+    icon.setGravity(Gravity.CENTER);
+    TextView text = new TextView(this);
+    text.setText(label);
+    text.setTextSize(10);
+    text.setTextColor(Color.rgb(220, 222, 225));
+    text.setGravity(Gravity.CENTER);
+    text.setMaxLines(1);
+    button.addView(icon, new LinearLayout.LayoutParams(-1, dp(38)));
+    button.addView(text, new LinearLayout.LayoutParams(-1, dp(24)));
     button.setOnClickListener(view -> action.run());
-    LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(50), dp(48));
-    params.setMargins(dp(3), 0, dp(3), 0);
+    LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(68), 1f);
+    params.setMargins(dp(3), dp(3), dp(3), dp(3));
     parent.addView(button, params);
   }
 
@@ -421,7 +532,7 @@ public final class DesktopPetService extends Service {
       return;
     }
     if (roleId.isEmpty()) {
-      showBubble("请先在实验性功能中选择桌宠角色", false);
+      showBubble("请先在“我的 → 桌宠模式”中选择桌宠角色", false);
       return;
     }
     hideQuickReply();
@@ -441,14 +552,22 @@ public final class DesktopPetService extends Service {
           prefs.edit().putLong("desktop_pet_last_bubble_at", lastBubbleAt)
               .remove("desktop_pet_last_error").apply();
           animatePet();
-          if (bubbleClosedDuringReply) setUnread(true); else showBubble(result.text, false);
+          String replyMode = prefs.getString("desktop_pet_reply_mode", "both");
+          if ("voice".equals(replyMode) || "both".equals(replyMode)) speech.speak(result.text);
+          if ("voice".equals(replyMode)) hideBubble();
+          else if (bubbleClosedDuringReply) setUnread(true);
+          else showBubble(result.text, false);
           bubbleClosedDuringReply = false;
         });
       } catch (Exception error) {
+        if (error instanceof InterruptedException || MainActivity.isDataRescueRequired(this)) return;
         GenerationTaskTracker.fail(this,taskId,error);
-        String detail = error.getMessage() == null ? error.toString() : error.getMessage();
-        prefs.edit().putString("desktop_pet_last_error", detail).apply();
-        String shown = detail.length() > 110 ? detail.substring(0, 110) + "…" : detail;
+        String detail = MainActivity.errorDetails(error);
+        prefs.edit().putString("desktop_pet_last_error", MainActivity.friendlyError(error))
+            .putString("last_api_error", detail).apply();
+        DiagnosticLog.record(this, "desktop_pet", "error",
+            MainActivity.diagnosticSummary(error));
+        String shown = MainActivity.friendlyError(error);
         handler.post(() -> {
           replying = false;
           if (bubbleClosedDuringReply) setUnread(true); else showBubble("回复失败：" + shown, false);
@@ -460,7 +579,7 @@ public final class DesktopPetService extends Service {
 
   private void analyzeCurrentScreen(){
     if(!prefs.getBoolean("experimental_screen_context_enabled",false)){
-      Toast.makeText(this,"请先在时遇实验性功能中开启屏幕内容分析",Toast.LENGTH_LONG).show();
+      Toast.makeText(this,"请先在“我的 → 桌宠模式”中开启屏幕内容分析",Toast.LENGTH_LONG).show();
       openApp("");
       return;
     }
@@ -503,14 +622,6 @@ public final class DesktopPetService extends Service {
     body.setEllipsize(android.text.TextUtils.TruncateAt.END);
     body.setLineSpacing(0, 1.08f);
     copy.addView(body, new LinearLayout.LayoutParams(-1, -2));
-    TextView move = new TextView(this);
-    move.setText("✥");
-    move.setTextColor(Color.argb(175, 116, 108, 112));
-    move.setGravity(Gravity.CENTER);
-    move.setTextSize(17);
-    move.setContentDescription("上下左右拖动气泡");
-    move.setOnTouchListener(new BubbleDragTouchListener());
-    panel.addView(move, new LinearLayout.LayoutParams(dp(24), -1));
     copy.setOnTouchListener(new BubbleDragTouchListener());
     panel.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
 
@@ -556,17 +667,18 @@ public final class DesktopPetService extends Service {
     if (!loading) panel.setOnClickListener(view -> {setUnread(false);openApp(chatId);});
 
     TextView resize = new TextView(this);
-    resize.setText("↔");
+    resize.setText("⤢");
     resize.setTextColor(Color.argb(150, 116, 108, 112));
     resize.setGravity(Gravity.CENTER);
     resize.setTextSize(18);
-    resize.setContentDescription("拖动调整气泡宽度");
+    resize.setContentDescription("上下左右拖动调整气泡大小");
     resize.setOnTouchListener(new BubbleResizeTouchListener());
     panel.addView(resize, new LinearLayout.LayoutParams(dp(20), -1));
 
     bubbleView = panel;
     int width = Math.min(dp(widthDp), getResources().getDisplayMetrics().widthPixels - dp(24));
-    bubbleParams = overlayParams(width, -2);
+    int savedHeightDp = prefs.getInt("desktop_pet_bubble_height", 0);
+    bubbleParams = overlayParams(width, savedHeightDp > 0 ? dp(savedHeightDp) : -2);
     positionBubble(bubbleParams, width, dp(loading ? 62 : 112));
     try {
       windowManager.addView(bubbleView, bubbleParams);
@@ -798,6 +910,27 @@ public final class DesktopPetService extends Service {
     startActivity(intent);
   }
 
+  private void openPetSettings() {
+    Intent intent = new Intent(this, ComposeActivity.class)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        .putExtra("open_desktop_pet_settings", true);
+    startActivity(intent);
+  }
+
+  private void resetPetPosition() {
+    if (petParams == null || petView == null) return;
+    int maxX = Math.max(0, getResources().getDisplayMetrics().widthPixels - petParams.width);
+    int maxY = Math.max(0, getResources().getDisplayMetrics().heightPixels - petParams.height);
+    petParams.x = Math.max(0, Math.min(maxX, dp(18)));
+    petParams.y = Math.max(0, Math.min(maxY, dp(150)));
+    prefs.edit().putInt("desktop_pet_x", petParams.x).putInt("desktop_pet_y", petParams.y)
+        .remove("desktop_pet_menu_x").remove("desktop_pet_menu_y").apply();
+    try { windowManager.updateViewLayout(petView, petParams); } catch (RuntimeException ignored) {}
+    hideMenu();
+    animatePet();
+    Toast.makeText(this, "桌宠位置已重置", Toast.LENGTH_SHORT).show();
+  }
+
   private void setUnread(boolean unread){
     prefs.edit().putBoolean("desktop_pet_unread",unread).apply();
     if(unreadView!=null)unreadView.setVisibility(unread?View.VISIBLE:View.GONE);
@@ -807,6 +940,7 @@ public final class DesktopPetService extends Service {
     if (menuView == null) return;
     try { windowManager.removeView(menuView); } catch (RuntimeException ignored) {}
     menuView = null;
+    menuParams = null;
   }
 
   private void hideBubble() {
@@ -879,11 +1013,54 @@ public final class DesktopPetService extends Service {
   public void onDestroy() {
     handler.removeCallbacksAndMessages(null);
     removeOverlays();
+    if (speech != null) speech.release();
     replyExecutor.shutdownNow();
+    CrashProtection.clearFeatureActive(this, CrashProtection.FEATURE_DESKTOP_PET);
     super.onDestroy();
   }
 
   @Override public IBinder onBind(Intent intent) { return null; }
+
+  private final class MenuDragTouchListener implements View.OnTouchListener {
+    private float downRawX, downRawY;
+    private int startX, startY;
+    private boolean moved;
+
+    @Override public boolean onTouch(View view, MotionEvent event) {
+      switch (event.getActionMasked()) {
+        case MotionEvent.ACTION_DOWN:
+          if (menuParams == null || menuView == null) return false;
+          menuView.animate().cancel();
+          downRawX = event.getRawX();
+          downRawY = event.getRawY();
+          startX = menuParams.x;
+          startY = menuParams.y;
+          moved = false;
+          return true;
+        case MotionEvent.ACTION_MOVE:
+          if (menuParams == null || menuView == null) return true;
+          float dx = event.getRawX() - downRawX;
+          float dy = event.getRawY() - downRawY;
+          if (!moved && Math.hypot(dx, dy) > ViewConfiguration.get(DesktopPetService.this).getScaledTouchSlop()) moved = true;
+          if (moved) {
+            int width = Math.max(dp(304), menuView.getWidth());
+            int height = Math.max(dp(248), menuView.getHeight());
+            int maxX = Math.max(dp(6), getResources().getDisplayMetrics().widthPixels - width - dp(6));
+            int maxY = Math.max(dp(6), getResources().getDisplayMetrics().heightPixels - height - dp(6));
+            menuParams.x = Math.max(dp(6), Math.min(maxX, startX + Math.round(dx)));
+            menuParams.y = Math.max(dp(6), Math.min(maxY, startY + Math.round(dy)));
+            try { windowManager.updateViewLayout(menuView, menuParams); } catch (RuntimeException ignored) {}
+          }
+          return true;
+        case MotionEvent.ACTION_UP:
+        case MotionEvent.ACTION_CANCEL:
+          if (moved && menuParams != null) prefs.edit().putInt("desktop_pet_menu_x", menuParams.x).putInt("desktop_pet_menu_y", menuParams.y).apply();
+          return true;
+        default:
+          return false;
+      }
+    }
+  }
 
   private final class PetTouchListener implements View.OnTouchListener {
     private float downRawX;
@@ -976,28 +1153,40 @@ public final class DesktopPetService extends Service {
   }
 
   private final class BubbleResizeTouchListener implements View.OnTouchListener {
-    private float downRawX;
-    private int startWidth;
+    private float downRawX, downRawY;
+    private int startWidth, startHeight;
     private boolean moved;
 
     @Override public boolean onTouch(View view, MotionEvent event) {
       switch (event.getActionMasked()) {
         case MotionEvent.ACTION_DOWN:
-          downRawX = event.getRawX(); startWidth = bubbleParams == null ? dp(286) : bubbleParams.width; moved = false; return true;
+          downRawX = event.getRawX();
+          downRawY = event.getRawY();
+          startWidth = bubbleParams == null ? dp(286) : bubbleParams.width;
+          startHeight = bubbleView == null ? dp(112) : Math.max(dp(62), bubbleView.getHeight());
+          moved = false;
+          return true;
         case MotionEvent.ACTION_MOVE:
           float dx = event.getRawX() - downRawX;
-          if (!moved && Math.abs(dx) > ViewConfiguration.get(DesktopPetService.this).getScaledTouchSlop()) moved = true;
+          float dy = event.getRawY() - downRawY;
+          if (!moved && Math.hypot(dx, dy) > ViewConfiguration.get(DesktopPetService.this).getScaledTouchSlop()) moved = true;
           if (moved && bubbleParams != null && bubbleView != null) {
             int maxWidth = Math.min(dp(360), getResources().getDisplayMetrics().widthPixels - dp(24));
+            int maxHeight = Math.min(dp(320), getResources().getDisplayMetrics().heightPixels - dp(48));
             int width = Math.max(dp(180), Math.min(maxWidth, startWidth + Math.round(dx)));
+            int height = Math.max(dp(62), Math.min(maxHeight, startHeight + Math.round(dy)));
             bubbleParams.width = width;
+            bubbleParams.height = height;
             bubbleParams.x = Math.max(0, Math.min(getResources().getDisplayMetrics().widthPixels - width, bubbleParams.x));
+            bubbleParams.y = Math.max(0, Math.min(getResources().getDisplayMetrics().heightPixels - height, bubbleParams.y));
             try { windowManager.updateViewLayout(bubbleView, bubbleParams); } catch (RuntimeException ignored) {}
           }
           return true;
         case MotionEvent.ACTION_UP:
         case MotionEvent.ACTION_CANCEL:
-          if (moved && bubbleParams != null) prefs.edit().putInt("desktop_pet_bubble_width", Math.round(bubbleParams.width / getResources().getDisplayMetrics().density)).apply();
+          if (moved && bubbleParams != null) prefs.edit()
+              .putInt("desktop_pet_bubble_width", Math.round(bubbleParams.width / getResources().getDisplayMetrics().density))
+              .putInt("desktop_pet_bubble_height", Math.round(bubbleParams.height / getResources().getDisplayMetrics().density)).apply();
           return true;
         default:return false;
       }

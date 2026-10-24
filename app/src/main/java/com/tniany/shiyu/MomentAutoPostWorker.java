@@ -14,6 +14,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -30,8 +31,13 @@ import org.json.JSONObject;
 /** Periodically lets explicitly authorized roles publish a local moment. */
 public final class MomentAutoPostWorker extends JobService {
   private static final int JOB_ID = 0x4d4f4d54;
+  private volatile Thread runningThread;
 
   static void sync(Context context) {
+    if (MainActivity.isDataRescueRequired(context)) {
+      cancel(context);
+      return;
+    }
     SharedPreferences prefs = context.getSharedPreferences(MainActivity.PREF, Context.MODE_PRIVATE);
     Set<String> roles = new HashSet<>(prefs.getStringSet("moments_auto_roles", java.util.Collections.emptySet()));
     roles.addAll(prefs.getStringSet("moments_comment_roles", java.util.Collections.emptySet()));
@@ -45,28 +51,54 @@ public final class MomentAutoPostWorker extends JobService {
     scheduler.schedule(job);
   }
 
+  static void cancel(Context context) {
+    JobScheduler scheduler = (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+    if (scheduler != null) scheduler.cancel(JOB_ID);
+  }
+
   @Override public boolean onStartJob(JobParameters params) {
-    new Thread(() -> {
-      runOnce(getApplicationContext());
-      jobFinished(params, false);
-    }, "shiyu-moment-auto-post").start();
+    Thread worker = new Thread(() -> {
+      Context context = getApplicationContext();
+      CrashProtection.markFeatureActive(context, CrashProtection.FEATURE_MOMENT_AUTO);
+      try {
+        runOnce(context);
+      } finally {
+        if (runningThread == Thread.currentThread()) runningThread = null;
+        CrashProtection.clearFeatureActive(context, CrashProtection.FEATURE_MOMENT_AUTO);
+        jobFinished(params, false);
+      }
+    }, "shiyu-moment-auto-post");
+    runningThread = worker;
+    worker.start();
     return true;
   }
 
   @Override public boolean onStopJob(JobParameters params) {
-    return true;
+    Thread worker = runningThread;
+    runningThread = null;
+    if (worker != null) worker.interrupt();
+    return !MainActivity.isDataRescueRequired(this);
   }
 
   static boolean runForeground(Context context) {
+    if (MainActivity.isDataRescueRequired(context)) return false;
     SharedPreferences prefs = context.getSharedPreferences(MainActivity.PREF, Context.MODE_PRIVATE);
     long before = prefs.getLong("moment_state_revision", 0);
-    runOnce(context.getApplicationContext());
+    Context app = context.getApplicationContext();
+    CrashProtection.markFeatureActive(app, CrashProtection.FEATURE_MOMENT_AUTO);
+    try {
+      runOnce(app);
+    } finally {
+      CrashProtection.clearFeatureActive(app, CrashProtection.FEATURE_MOMENT_AUTO);
+    }
     return prefs.getLong("moment_state_revision", 0) != before;
   }
 
   private static synchronized void runOnce(Context context) {
     SharedPreferences prefs = context.getSharedPreferences(MainActivity.PREF, Context.MODE_PRIVATE);
-    if (prefs.getLong("active_generation_until", 0) > System.currentTimeMillis()) return;
+    long writeEpoch = MainActivity.dataWriteEpoch(context);
+    if (Thread.currentThread().isInterrupted() || MainActivity.isDataRescueRequired(context)
+        || prefs.getLong("active_generation_until", 0) > System.currentTimeMillis()) return;
     Set<String> allowed = new HashSet<>(prefs.getStringSet("moments_auto_roles", java.util.Collections.emptySet()));
     Set<String> commenters = new HashSet<>(prefs.getStringSet("moments_comment_roles", java.util.Collections.emptySet()));
     if (allowed.isEmpty() && commenters.isEmpty()) return;
@@ -90,7 +122,7 @@ public final class MomentAutoPostWorker extends JobService {
         if (card == null || !commenters.contains(card.optString("id"))) continue;
         String id = card.optString("id");
         long next = prefs.getLong("moment_comment_next_" + id, 0);
-        if (next == 0) { scheduleCommentNext(prefs, id, now); continue; }
+        if (next == 0) { scheduleCommentNext(prefs, id, now, writeEpoch); continue; }
         if (now < next) continue;
 
         int likeChance = Math.max(0, Math.min(100, prefs.getInt("moments_like_probability", 65)));
@@ -109,12 +141,12 @@ public final class MomentAutoPostWorker extends JobService {
           if (canLike || canComment) candidates.add(candidate);
         }
         Collections.shuffle(candidates);
-        if (candidates.isEmpty()) { scheduleCommentNext(prefs, id, now); continue; }
+        if (candidates.isEmpty()) { scheduleCommentNext(prefs, id, now, writeEpoch); continue; }
         JSONObject target = candidates.get(0);
         String targetId = target.optString("id");
         int viewChance = Math.max(0, Math.min(100, prefs.getInt("moments_view_probability", 80)));
         if (Math.random() * 100 >= viewChance) {
-          scheduleCommentNext(prefs, id, now);
+          scheduleCommentNext(prefs, id, now, writeEpoch);
           continue;
         }
         JSONArray values = currentCommentRoot.optJSONArray(targetId);
@@ -126,8 +158,10 @@ public final class MomentAutoPostWorker extends JobService {
             && Math.random() * 100 < commentChance;
         String comment = "";
         if (commented) comment = AiContentSanitizer.comment(generateComment(endpoint, key, model, prefs, card, target, values));
+        if (Thread.currentThread().isInterrupted()
+            || !MainActivity.canWriteData(context, writeEpoch)) return;
         if (!containsMoment(new JSONArray(prefs.getString("moments", "[]")), targetId)) {
-          scheduleCommentNext(prefs, id, now);
+          scheduleCommentNext(prefs, id, now, writeEpoch);
           continue;
         }
 
@@ -158,8 +192,9 @@ public final class MomentAutoPostWorker extends JobService {
         if (savedComment) interaction.putString("moment_comments", commentRoot.toString());
         if (savedLike || savedComment)
           interaction.putLong("moment_state_revision", prefs.getLong("moment_state_revision", 0) + 1);
+        if (!MainActivity.canWriteData(context, writeEpoch)) return;
         interaction.apply();
-        scheduleCommentNext(prefs, id, now);
+        scheduleCommentNext(prefs, id, now, writeEpoch);
         if (savedComment || savedLike) {
           String action = savedComment && savedLike ? "comment_like" : savedComment ? "comment" : "like";
           String body = savedComment ? comment : "赞了 " + target.optString("authorName", "对方") + " 的动态";
@@ -174,11 +209,13 @@ public final class MomentAutoPostWorker extends JobService {
         String id = card.optString("id");
         long next = prefs.getLong("moment_auto_next_" + id, 0);
         if (next == 0) {
-          scheduleNext(prefs, id, now);
+          scheduleNext(prefs, id, now, writeEpoch);
           continue;
         }
         if (now < next) continue;
         String body = AiContentSanitizer.moment(generate(endpoint, key, model, prefs, state, card));
+        if (Thread.currentThread().isInterrupted()
+            || !MainActivity.canWriteData(context, writeEpoch)) return;
         if (body.isEmpty()) throw new IllegalStateException("模型没有返回可发布的正文");
         JSONArray moments = new JSONArray(prefs.getString("moments", "[]"));
         JSONObject post = new JSONObject().put("id", java.util.UUID.randomUUID().toString())
@@ -186,14 +223,19 @@ public final class MomentAutoPostWorker extends JobService {
             .put("content", body).put("image", "").put("createdAt", now);
         JSONArray updated = new JSONArray().put(post);
         for (int j = 0; j < Math.min(499, moments.length()); j++) updated.put(moments.opt(j));
+        if (!MainActivity.canWriteData(context, writeEpoch)) return;
         prefs.edit().putString("moments", updated.toString()).remove("moment_auto_last_error")
             .putLong("moment_state_revision", prefs.getLong("moment_state_revision", 0) + 1).apply();
-        scheduleNext(prefs, id, now);
+        scheduleNext(prefs, id, now, writeEpoch);
         notifyIfBackground(context, prefs, card.optString("name", "角色"), body, "post");
         break;
       }
     } catch (Exception error) {
-      prefs.edit().putString("moment_auto_last_error", error.getMessage() == null ? error.toString() : error.getMessage()).apply();
+      if (MainActivity.canWriteData(context, writeEpoch)) {
+        prefs.edit().putString("moment_auto_last_error", MainActivity.friendlyError(error))
+            .putString("last_api_error", MainActivity.errorDetails(error)).apply();
+        DiagnosticLog.record(context, "moment_auto", "error", MainActivity.diagnosticSummary(error));
+      }
     } finally {
       db.close();
     }
@@ -222,7 +264,9 @@ public final class MomentAutoPostWorker extends JobService {
     return false;
   }
 
-  private static void scheduleNext(SharedPreferences prefs, String id, long now) {
+  private static void scheduleNext(
+      SharedPreferences prefs, String id, long now, long writeEpoch) {
+    if (!canWrite(prefs, writeEpoch)) return;
     int legacyMin = Math.max(1, prefs.getInt("moments_auto_min_hours", 4)) * 60;
     int legacyMax = Math.max(legacyMin, prefs.getInt("moments_auto_max_hours", 12) * 60);
     int min = Math.max(1, prefs.getInt("moments_auto_min_minutes", legacyMin));
@@ -231,13 +275,24 @@ public final class MomentAutoPostWorker extends JobService {
     prefs.edit().putLong("moment_auto_next_" + id, now + minutes * 60_000L).apply();
   }
 
-  private static void scheduleCommentNext(SharedPreferences prefs, String id, long now) {
+  private static void scheduleCommentNext(
+      SharedPreferences prefs, String id, long now, long writeEpoch) {
+    if (!canWrite(prefs, writeEpoch)) return;
     int legacyMin = Math.max(1, prefs.getInt("moments_auto_min_hours", 4)) * 60;
     int legacyMax = Math.max(legacyMin, prefs.getInt("moments_auto_max_hours", 12) * 60);
     int min = Math.max(1, prefs.getInt("moments_auto_min_minutes", legacyMin));
     int max = Math.max(min, prefs.getInt("moments_auto_max_minutes", legacyMax));
     long minutes = min + (long) (Math.random() * (max - min + 1));
     prefs.edit().putLong("moment_comment_next_" + id, now + minutes * 60_000L).apply();
+  }
+
+  private static boolean canWrite(SharedPreferences prefs, long writeEpoch) {
+    try {
+      return !prefs.getBoolean(MainActivity.DATA_RESCUE_REQUIRED, false)
+          && prefs.getLong(MainActivity.DATA_WRITE_EPOCH, 0L) == writeEpoch;
+    } catch (RuntimeException ignored) {
+      return false;
+    }
   }
 
   private static String generate(String endpoint, String key, String model, SharedPreferences prefs,
@@ -297,7 +352,10 @@ public final class MomentAutoPostWorker extends JobService {
     int code = connection.getResponseCode();
     String raw = read(code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream());
     if (code < 200 || code >= 300) throw new IllegalStateException("HTTP " + code + (raw.isEmpty() ? "" : "：" + raw));
-    return new JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim();
+    String content = MainActivity.jsonText(new JSONObject(raw).getJSONArray("choices")
+        .getJSONObject(0).getJSONObject("message"), "content").trim();
+    if (content.isEmpty()) throw new IOException("接口未返回消息正文");
+    return content;
     } finally {
       connection.disconnect();
     }
@@ -330,7 +388,10 @@ public final class MomentAutoPostWorker extends JobService {
     try (OutputStream output = connection.getOutputStream()) { output.write(request.toString().getBytes(StandardCharsets.UTF_8)); }
     int code = connection.getResponseCode();String raw = read(code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream());
     if (code < 200 || code >= 300) throw new IllegalStateException("HTTP " + code + (raw.isEmpty() ? "" : "：" + raw));
-    return new JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim();
+    String content = MainActivity.jsonText(new JSONObject(raw).getJSONArray("choices")
+        .getJSONObject(0).getJSONObject("message"), "content").trim();
+    if (content.isEmpty()) throw new IOException("接口未返回消息正文");
+    return content;
     } finally {
       connection.disconnect();
     }

@@ -2,6 +2,7 @@ package com.tniany.shiyu;
 
 import android.content.SharedPreferences;
 import java.io.InterruptedIOException;
+import java.net.SocketTimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -27,7 +28,9 @@ final class GenerationRetry {
   }
 
   static boolean shouldRetry(Exception error) {
-    if (error instanceof InterruptedIOException || Thread.currentThread().isInterrupted()) return false;
+    if (error instanceof ChatRequestMessages.InvalidContextException) return false;
+    if ((error instanceof InterruptedIOException && !(error instanceof SocketTimeoutException))
+        || Thread.currentThread().isInterrupted()) return false;
     String message = error.getMessage() == null ? "" : error.getMessage();
     Matcher status = Pattern.compile("HTTP\\s+(\\d{3})").matcher(message);
     if (!status.find()) return true;

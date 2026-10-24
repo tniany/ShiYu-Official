@@ -39,6 +39,8 @@ final class SpeechEngine {
   private boolean localInitializing;
   private String initializedEngine = "";
   private String pendingLocal = "";
+  private int pendingLocalToken;
+  private volatile String activeUtteranceId = "";
   private volatile boolean speaking;
   private volatile String currentText = "";
   private volatile int generation;
@@ -56,24 +58,33 @@ final class SpeechEngine {
   void speak(String raw) {
     String text = clean(raw);
     if (text.isEmpty()) return;
-    stop();
+    stopInternal(false);
     int token = ++generation;
     currentText = text;
     state(true, "");
     if ("online".equals(prefs.getString("tts_provider", "local"))) speakOnline(text, token);
-    else speakLocal(text);
+    else speakLocal(text, token);
   }
 
   void stop() {
+    stopInternal(true);
+  }
+
+  private void stopInternal(boolean notify) {
     generation++;
     pendingLocal = "";
+    pendingLocalToken = 0;
+    activeUtteranceId = "";
     if (local != null) local.stop();
     if (player != null) {
       try { player.stop(); } catch (Exception ignored) {}
       player.release();
       player = null;
     }
-    if (speaking) state(false, "");
+    if (speaking) {
+      if (notify) state(false, "");
+      else speaking = false;
+    }
   }
 
   void release() {
@@ -85,6 +96,8 @@ final class SpeechEngine {
 
   void resetLocal() {
     pendingLocal = "";
+    pendingLocalToken = 0;
+    activeUtteranceId = "";
     localReady = false;
     localInitializing = false;
     initializedEngine = "";
@@ -92,19 +105,20 @@ final class SpeechEngine {
     local = null;
   }
 
-  private void speakLocal(String text) {
+  private void speakLocal(String text, int token) {
     String configuredEngine = prefs.getString("tts_engine", "");
     if ("auto_xiaomi".equals(configuredEngine)) {
       configuredEngine = "";
       prefs.edit().putString("tts_engine", "").apply();
     }
     if (localReady && local != null && configuredEngine.equals(initializedEngine)) {
-      speakReadyLocal(text);
+      speakReadyLocal(text, token);
       return;
     }
-    if (localInitializing) { pendingLocal = text; return; }
+    if (localInitializing) { pendingLocal = text; pendingLocalToken = token; return; }
     resetLocal();
     pendingLocal = text;
+    pendingLocalToken = token;
     initializeLocal(configuredEngine, false);
   }
 
@@ -124,14 +138,16 @@ final class SpeechEngine {
     if (status == TextToSpeech.SUCCESS && local != null) {
       localReady = true;
       local.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-        public void onStart(String id) { state(true, ""); }
-        public void onDone(String id) { state(false, ""); }
-        public void onError(String id) { state(false, "本地语音播放失败"); }
+        public void onStart(String id) { if (id.equals(activeUtteranceId)) state(true, ""); }
+        public void onDone(String id) { if (id.equals(activeUtteranceId)) { activeUtteranceId = ""; state(false, ""); } }
+        public void onError(String id) { if (id.equals(activeUtteranceId)) { activeUtteranceId = ""; state(false, "本地语音播放失败"); } }
       });
       local.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
       String value = pendingLocal;
+      int token = pendingLocalToken;
       pendingLocal = "";
-      if (!value.isEmpty()) speakReadyLocal(value);
+      pendingLocalToken = 0;
+      if (!value.isEmpty() && token == generation) speakReadyLocal(value, token);
       return;
     }
     if (local != null) local.shutdown();
@@ -144,10 +160,16 @@ final class SpeechEngine {
     } else state(false, "未检测到可用的本地语音引擎，请在系统 TTS 设置中安装语音包");
   }
 
-  private void speakReadyLocal(String text) {
+  private void speakReadyLocal(String text, int token) {
+    if (token != generation || local == null) return;
     applyLocalSettings();
-    int result = local.speak(text, TextToSpeech.QUEUE_FLUSH, new Bundle(), UUID.randomUUID().toString());
-    if (result == TextToSpeech.ERROR) state(false, "本地语音引擎拒绝播放，请检查语音包");
+    String utteranceId = "shiyu-" + token + '-' + UUID.randomUUID();
+    activeUtteranceId = utteranceId;
+    int result = local.speak(text, TextToSpeech.QUEUE_FLUSH, new Bundle(), utteranceId);
+    if (result == TextToSpeech.ERROR) {
+      activeUtteranceId = "";
+      state(false, "本地语音引擎拒绝播放，请检查语音包");
+    }
   }
 
   private void applyLocalSettings() {
@@ -224,8 +246,14 @@ final class SpeechEngine {
       player.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
       player.setDataSource(file.getAbsolutePath());
       player.setOnPreparedListener(MediaPlayer::start);
-      player.setOnCompletionListener(value -> { value.release(); player = null; file.delete(); state(false, ""); });
-      player.setOnErrorListener((value, what, extra) -> { value.release(); player = null; file.delete(); state(false, "在线语音播放失败"); return true; });
+      player.setOnCompletionListener(value -> {
+        if (player != value) { value.release(); file.delete(); return; }
+        value.release(); player = null; file.delete(); state(false, "");
+      });
+      player.setOnErrorListener((value, what, extra) -> {
+        if (player != value) { value.release(); file.delete(); return true; }
+        value.release(); player = null; file.delete(); state(false, "在线语音播放失败"); return true;
+      });
       player.prepareAsync();
     } catch (Exception error) {
       file.delete();

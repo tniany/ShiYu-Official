@@ -19,11 +19,17 @@ public final class NotificationKeepAliveService extends Service {
   static void sync(Context context) {
     SharedPreferences prefs = context.getSharedPreferences(MainActivity.PREF, Context.MODE_PRIVATE);
     Intent intent = new Intent(context, NotificationKeepAliveService.class);
+    if (MainActivity.isDataRescueRequired(context)) {
+      context.stopService(intent);
+      return;
+    }
     if (prefs.getBoolean("notification_keep_alive", false)) {
       try {
         if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent);
         else context.startService(intent);
-      } catch (RuntimeException ignored) {
+      } catch (RuntimeException error) {
+        DiagnosticLog.record(context, "notification_keep_alive", "error",
+            MainActivity.diagnosticSummary(error));
         // Some vendors reject background starts; the next foreground launch retries.
       }
     } else {
@@ -33,6 +39,11 @@ public final class NotificationKeepAliveService extends Service {
 
   @Override public void onCreate() {
     super.onCreate();
+    if (MainActivity.isDataRescueRequired(this)) {
+      stopSelf();
+      return;
+    }
+    CrashProtection.markFeatureActive(this, CrashProtection.FEATURE_NOTIFICATION_KEEP_ALIVE);
     NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
     if (Build.VERSION.SDK_INT >= 26) {
       NotificationChannel channel = new NotificationChannel(
@@ -56,7 +67,18 @@ public final class NotificationKeepAliveService extends Service {
   }
 
   @Override public int onStartCommand(Intent intent, int flags, int startId) {
+    if (MainActivity.isDataRescueRequired(this)
+        || !getSharedPreferences(MainActivity.PREF, MODE_PRIVATE)
+        .getBoolean("notification_keep_alive", false)) {
+      stopSelf(startId);
+      return START_NOT_STICKY;
+    }
     return START_STICKY;
+  }
+
+  @Override public void onDestroy() {
+    CrashProtection.clearFeatureActive(this, CrashProtection.FEATURE_NOTIFICATION_KEEP_ALIVE);
+    super.onDestroy();
   }
 
   @Override public IBinder onBind(Intent intent) {

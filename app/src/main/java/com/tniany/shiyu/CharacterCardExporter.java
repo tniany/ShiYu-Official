@@ -28,6 +28,7 @@ final class CharacterCardExporter {
   private static final int MAX_DECODE_DIMENSION = 2048;
 
   enum Format {
+    SHIY("application/vnd.shiyu.character+json", "shiy", "shiy"),
     JSON_V2("application/json", "json", "ccv2"),
     JSON_V3("application/json", "json", "ccv3"),
     PNG_V2("image/png", "png", "ccv2"),
@@ -45,6 +46,10 @@ final class CharacterCardExporter {
 
     boolean isPng() {
       return this == PNG_V2 || this == PNG_V3;
+    }
+
+    boolean isShiy() {
+      return this == SHIY;
     }
 
     boolean isV3() {
@@ -122,7 +127,16 @@ final class CharacterCardExporter {
 
     JSONObject requestedCard;
     byte[] output;
-    if (format.isPng()) {
+    if (format.isShiy()) {
+      JSONObject portable = buildCard(card, true, null, null);
+      JSONObject container = new JSONObject()
+          .put("format", "shiyu.character")
+          .put("format_version", 1)
+          .put("exported_at", System.currentTimeMillis())
+          .put("card", portable);
+      requestedCard = container;
+      output = container.toString(2).getBytes(StandardCharsets.UTF_8);
+    } else if (format.isPng()) {
       byte[] pngAvatar = ensurePng(cleanAvatar, card.name);
       JSONObject v2 = buildCard(card, false, null, null);
       JSONObject v3 = buildCard(card, true, null, null);

@@ -22,8 +22,12 @@ public final class YandereMessageService extends Service {
 
   static void sync(Context context) {
     SharedPreferences prefs = context.getSharedPreferences(MainActivity.PREF, Context.MODE_PRIVATE);
-    boolean enabled = prefs.getBoolean("active_replies", false) && hasEnabledChat(context);
     Intent intent = new Intent(context, YandereMessageService.class);
+    if (MainActivity.isDataRescueRequired(context)) {
+      context.stopService(intent);
+      return;
+    }
+    boolean enabled = prefs.getBoolean("active_replies", false) && hasEnabledChat(context);
     if (enabled) {
       if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent);
       else context.startService(intent);
@@ -38,13 +42,22 @@ public final class YandereMessageService extends Service {
       if (state.isEmpty()) return false;
       JSONArray chats = new JSONObject(state).optJSONArray("chats");
       if (chats == null) return false;
-      for (int i = 0; i < chats.length(); i++) if (chats.optJSONObject(i).optBoolean("yandereEnabled")) return true;
+      for (int i = 0; i < chats.length(); i++) {
+        JSONObject chat = chats.optJSONObject(i);
+        if (chat != null && chat.optBoolean("yandereEnabled")
+            && !chat.optBoolean("userBlockedRole") && !chat.optBoolean("roleBlockedUser")) return true;
+      }
     } catch (Exception ignored) {}
     return false;
   }
 
   @Override public void onCreate() {
     super.onCreate();
+    if (MainActivity.isDataRescueRequired(this)) {
+      stopSelf();
+      return;
+    }
+    CrashProtection.markFeatureActive(this, CrashProtection.FEATURE_ACTIVE_REPLIES);
     NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
     if (Build.VERSION.SDK_INT >= 26)
       manager.createNotificationChannel(new NotificationChannel("yandere_mode", "病娇模式后台运行", NotificationManager.IMPORTANCE_LOW));
@@ -58,7 +71,19 @@ public final class YandereMessageService extends Service {
     timer.scheduleWithFixedDelay(() -> ActiveReplyWorker.runYandere(this), 1, 1, TimeUnit.MINUTES);
   }
 
-  @Override public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
-  @Override public void onDestroy() { if (timer != null) timer.shutdownNow(); super.onDestroy(); }
+  @Override public int onStartCommand(Intent intent, int flags, int startId) {
+    SharedPreferences prefs = getSharedPreferences(MainActivity.PREF, MODE_PRIVATE);
+    if (MainActivity.isDataRescueRequired(this)
+        || !prefs.getBoolean("active_replies", false) || !hasEnabledChat(this)) {
+      stopSelf(startId);
+      return START_NOT_STICKY;
+    }
+    return START_STICKY;
+  }
+  @Override public void onDestroy() {
+    if (timer != null) timer.shutdownNow();
+    CrashProtection.clearFeatureActive(this, CrashProtection.FEATURE_ACTIVE_REPLIES);
+    super.onDestroy();
+  }
   @Override public IBinder onBind(Intent intent) { return null; }
 }

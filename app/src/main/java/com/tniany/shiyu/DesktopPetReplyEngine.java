@@ -52,6 +52,11 @@ final class DesktopPetReplyEngine {
       String externalPeer, String externalTitle, String preferredChatId) throws Exception {
     Context app = context.getApplicationContext();
     SharedPreferences prefs = app.getSharedPreferences(MainActivity.PREF, Context.MODE_PRIVATE);
+    final String externalSource = "qqbot".equals(messageType) ? "qqbot"
+        : "weixin_link".equals(messageType) ? "weixin" : "";
+    long writeEpoch = MainActivity.dataWriteEpoch(app);
+    if (MainActivity.isDataRescueRequired(app))
+      throw new IllegalStateException("本地数据正在抢救，后台回复已暂停");
     long now = System.currentTimeMillis();
     if (prefs.getLong("active_generation_until", 0) > now)
       throw new IllegalStateException("当前有其他回复正在生成，请稍后再试");
@@ -64,12 +69,14 @@ final class DesktopPetReplyEngine {
     while (endpoint.endsWith("/")) endpoint = endpoint.substring(0, endpoint.length() - 1);
     if (!endpoint.endsWith("/chat/completions")) endpoint += "/chat/completions";
 
-    long reservation = now + 120_000L;
+    long reservation = now + MainActivity.AI_REQUEST_RESERVATION_MS;
     prefs.edit().putLong("active_generation_until", reservation).commit();
     try (AppDb db = new AppDb(app)) {
       String saved = db.loadState();
       if (saved.isEmpty()) throw new IllegalStateException("没有可用的角色数据");
       JSONObject root = new JSONObject(saved);
+      String commonWorldBook = root.optString("commonWorldBook", "");
+      String commonRegexRules = root.optString("commonRegexRules", "");
       JSONArray cardsJson = root.optJSONArray("cards");
       JSONArray chatsJson = root.optJSONArray("chats");
       if (cardsJson == null) throw new IllegalStateException("没有可用的角色数据");
@@ -103,6 +110,8 @@ final class DesktopPetReplyEngine {
             || !card.id.equals(value.optString("cardId"))) continue;
         if (chat != null) break;
         if (!externalPeer.isEmpty() && !externalPeer.equals(value.optString("externalPeer"))) continue;
+        if (!externalPeer.isEmpty() && !value.optString("externalSource").isEmpty()
+            && !externalSource.equals(value.optString("externalSource"))) continue;
         if (externalPeer.isEmpty() && !value.optString("externalPeer").isEmpty()) continue;
         long updated = value.optLong("updated", 0);
         if (chat == null || updated >= newest) {
@@ -114,40 +123,65 @@ final class DesktopPetReplyEngine {
       if (chat == null) {
         chat = createChat(card, prefs);
         if (!externalPeer.isEmpty()) {
-          chat.externalSource = "weixin";
+          chat.externalSource = externalSource;
           chat.externalPeer = externalPeer;
-          chat.title = externalTitle.isEmpty() ? "微信 · " + card.name : externalTitle;
+          chat.title = externalTitle.isEmpty()
+              ? ("qqbot".equals(externalSource) ? "QQ · " : "微信 · ") + card.name
+              : externalTitle;
         }
         chatIndex = chatsJson.length();
       }
       if (!externalPeer.isEmpty()) {
-        chat.externalSource = "weixin";
+        chat.externalSource = externalSource;
         chat.externalPeer = externalPeer;
-        if (!externalTitle.isEmpty() && (chat.title == null || chat.title.isEmpty() || chat.title.startsWith("微信"))) chat.title = externalTitle;
+        if (!externalTitle.isEmpty() && (chat.title == null || chat.title.isEmpty()
+            || chat.title.startsWith("微信") || chat.title.startsWith("QQ")))
+          chat.title = externalTitle;
       }
 
       boolean screenContext = "desktop_pet_screen_context".equals(messageType);
-      boolean weixinLink = "weixin_link".equals(messageType);
       MainActivity.Msg user = new MainActivity.Msg("user", screenContext ? "分享了当前屏幕" : userText.trim());
       user.messageType = screenContext ? "screen_context_share" : (messageType == null ? "desktop_pet" : messageType);
+      if (chat.userBlockedRole) user.delivered = false;
       chat.messages.add(user);
+      if (chat.userBlockedRole)
+        return persistWithoutReply(app, prefs, db, root, chatsJson, chatIndex, chat,
+            user.createdAt, writeEpoch);
       MainActivity.Chat targetChat = chat;
       MainActivity.Card targetCard = card;
       String targetEndpoint = endpoint;
-      String generated = GenerationRetry.run(prefs,
+      boolean roleWasBlocking = chat.roleBlockedUser;
+      String rawGenerated = GenerationRetry.run(prefs,
           () -> generateOnce(app, targetEndpoint, key, model, prefs, db, targetChat, targetCard,
-              screenContext ? userText.trim() : "", weixinLink));
-      generated = cleanReply(generated);
-      if (generated.isEmpty()) throw new IllegalStateException("角色没有返回可显示的内容");
+              screenContext ? userText.trim() : "", externalSource, commonWorldBook, commonRegexRules));
+      boolean requestedUnblock = rawGenerated.contains("[解除拉黑用户]");
+      boolean requestedBlock = !requestedUnblock && rawGenerated.contains("[拉黑用户]");
+      boolean declinedReply = rawGenerated.contains("[NO_REPLY]") || rawGenerated.contains("[不回复]");
+      if (requestedUnblock) chat.roleBlockedUser = false;
+      else if (requestedBlock) chat.roleBlockedUser = true;
+      String generated = cleanReply(rawGenerated.replace("[解除拉黑用户]", "")
+          .replace("[拉黑用户]", "").replace("[不回复]", ""));
+      if ((roleWasBlocking && !requestedUnblock) || declinedReply || generated.isEmpty()) {
+        if (roleWasBlocking || requestedBlock || requestedUnblock || declinedReply)
+          return persistWithoutReply(app, prefs, db, root, chatsJson, chatIndex, chat,
+              user.createdAt, writeEpoch);
+        throw new IllegalStateException("角色没有返回可显示的内容");
+      }
 
       MainActivity.Msg assistant = new MainActivity.Msg("assistant", generated);
       assistant.speakerCardId = card.id;
-      assistant.messageType = "desktop_pet_reply";
+      assistant.messageType = externalSource.isEmpty() ? "desktop_pet_reply"
+          : externalSource + "_reply";
+      String replyMode = prefs.getString("desktop_pet_reply_mode", "both");
+      assistant.displayMode = "voice".equals(replyMode) ? 1 : "both".equals(replyMode) ? 2 : 0;
       chat.messages.add(assistant);
       chat.updated = assistant.createdAt;
       chat.proactiveSequence = 0;
       chatsJson.put(chatIndex, chat.json());
       root.put("chats", chatsJson);
+      if (Thread.currentThread().isInterrupted()
+          || !MainActivity.canWriteData(app, writeEpoch))
+        throw new InterruptedException("本地数据抢救已暂停后台回复");
       db.saveState(root.toString());
       long revision = Math.max(assistant.createdAt, prefs.getLong("background_state_revision", 0) + 1);
       prefs.edit().putLong("background_state_revision", revision)
@@ -158,6 +192,23 @@ final class DesktopPetReplyEngine {
       if (prefs.getLong("active_generation_until", 0) == reservation)
         prefs.edit().remove("active_generation_until").apply();
     }
+  }
+
+  private static Result persistWithoutReply(Context app, SharedPreferences prefs, AppDb db,
+      JSONObject root, JSONArray chatsJson, int chatIndex, MainActivity.Chat chat, long timestamp,
+      long writeEpoch)
+      throws Exception {
+    if (Thread.currentThread().isInterrupted()
+        || !MainActivity.canWriteData(app, writeEpoch))
+      throw new InterruptedException("本地数据抢救已暂停后台回复");
+    chat.updated = Math.max(chat.updated, timestamp);
+    chatsJson.put(chatIndex, chat.json());
+    root.put("chats", chatsJson);
+    db.saveState(root.toString());
+    long revision = Math.max(timestamp, prefs.getLong("background_state_revision", 0) + 1);
+    prefs.edit().putLong("background_state_revision", revision).commit();
+    app.sendBroadcast(new Intent(ACTION_STATE_CHANGED).setPackage(app.getPackageName()));
+    return new Result(chat.id, "", timestamp);
   }
 
   private static MainActivity.Chat createChat(MainActivity.Card card, SharedPreferences prefs) {
@@ -181,24 +232,24 @@ final class DesktopPetReplyEngine {
 
   private static String generateOnce(Context context, String endpoint, String key, String model,
       SharedPreferences prefs, AppDb db, MainActivity.Chat chat, MainActivity.Card card,
-      String transientScreenContext, boolean weixinLink) throws Exception {
+      String transientScreenContext, String externalSource,
+      String commonWorldBook, String commonRegexRules) throws Exception {
     HttpURLConnection connection = (HttpURLConnection) new URL(endpoint).openConnection();
     try {
       connection.setRequestMethod("POST");
       connection.setConnectTimeout(20_000);
-      connection.setReadTimeout(90_000);
+      connection.setReadTimeout(MainActivity.AI_RESPONSE_TIMEOUT_MS);
       connection.setDoOutput(true);
       connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
       connection.setRequestProperty("Authorization", "Bearer " + key);
 
       JSONArray messages = new JSONArray();
-      String identityDescription = prefs.getString("active_identity_description", "").trim();
-      String identityName = prefs.getString("active_identity_name", "").trim();
-      String identity = identityName.isEmpty() ? identityDescription : identityName + "：" + identityDescription;
-      String worldBook = activeWorldBook(
-          chat.worldBookOverride ? chat.worldBook : card.worldBook, chat.messages, card, prefs);
+      String identity = MainActivity.identityFor(prefs,chat).prompt();
+      String worldBook = activeWorldBook(effectiveContent(
+          chat.worldBookOverride, chat.worldBook, card.worldBook, commonWorldBook), chat.messages, card, prefs);
       String preset = chat.presetOverride ? chat.preset : card.preset;
-      String regex = chat.regexRulesOverride ? chat.regexRules : card.regexRules;
+      String regex = effectiveContent(
+          chat.regexRulesOverride, chat.regexRules, card.regexRules, commonRegexRules);
       String memory = db.memoryContext(card.id);
       String system = "你是 " + card.name + "。始终保持角色卡设定的人格、措辞、关系和立场，不得代替用户发言。"
           + card.persona
@@ -211,11 +262,15 @@ final class DesktopPetReplyEngine {
           + (preset.isEmpty() ? "" : "\n对话预设：\n" + expand(preset, card, prefs))
           + (card.exampleMessages.isEmpty() ? "" : "\n角色示例对话：\n" + expand(card.exampleMessages, card, prefs))
           + realityContext(prefs)
-          + (weixinLink
-              ? "\n你正在通过微信私聊与用户交谈。像真人微信聊天一样自然回复，可以结合最近聊天，但不要提及连接器、API、模型或系统提示。"
-                  + "回复适合微信阅读，通常1到4句、最多300字；不要加角色名前缀，不要解释任务，不要输出内部指令。"
+          + (!externalSource.isEmpty()
+              ? "\n你正在通过" + ("qqbot".equals(externalSource) ? "QQ" : "微信")
+                  + "与用户交谈。像真人聊天一样自然回复，可以结合最近聊天，但不要提及连接器、API、模型或系统提示。"
+                  + "回复适合即时消息阅读，通常1到4句、最多300字；不要加角色名前缀，不要解释任务，不要输出内部指令。"
               : "\n你正以桌宠悬浮在用户当前页面旁边。把互动视为真实发生，结合最近聊天自然回应。"
-                  + "回复适合弹幕气泡阅读，通常1到2句、最多100字；不要加角色名前缀，不要解释任务，不要输出内部指令。");
+                  + "回复适合弹幕气泡阅读，通常1到2句、最多100字；不要加角色名前缀，不要解释任务，不要输出内部指令。")
+          + (chat.roleBlockedUser
+              ? "\n当前你已拉黑用户。你可以阅读新消息来决定是否解除；若不想解除，只输出 [NO_REPLY]；若决定恢复关系，必须输出 [解除拉黑用户] 后再自然回复。"
+              : "\n你可以在关系确实需要时输出 [拉黑用户]，或输出 [解除拉黑用户] 恢复关系；不要解释这些内部指令。");
       system = expand(system, card, prefs);
       if (!card.systemPrompt.isEmpty()) {
         String override = expand(card.systemPrompt, card, prefs);
@@ -225,16 +280,14 @@ final class DesktopPetReplyEngine {
       messages.put(new JSONObject().put("role", "system").put("content", system));
 
       int count = Math.max(6, Math.min(40, prefs.getInt("context", 30)));
-      for (int i = Math.max(0, chat.messages.size() - count); i < chat.messages.size(); i++) {
-        MainActivity.Msg message = chat.messages.get(i);
-        if (message.loading || "tavern_frontend".equals(message.messageType)
-            || "image_request".equals(message.messageType) || message.body.trim().isEmpty()) continue;
+      for (MainActivity.Msg message : ChatRequestMessages.recent(chat.messages, count)) {
+        if (message.body == null || message.body.trim().isEmpty()) continue;
         if ("screen_context_share".equals(message.messageType)
             || "desktop_pet_screen_context".equals(message.messageType)) continue;
         String content = message.body;
         if ("desktop_pet_interaction".equals(message.messageType)) content = "[桌宠互动：" + content + "]";
         else if ("desktop_pet_feed".equals(message.messageType)) content = "[桌宠投喂：" + content + "]";
-        messages.put(new JSONObject().put("role", message.role).put("content", content));
+        ChatRequestMessages.append(messages, message.role, content);
       }
       if (!transientScreenContext.isEmpty())
         messages.put(new JSONObject().put("role", "user").put("content", transientScreenContext));
@@ -244,6 +297,7 @@ final class DesktopPetReplyEngine {
 
       double temperature = Double.longBitsToDouble(
           prefs.getLong("temp", Double.doubleToLongBits(.85)));
+      ChatRequestMessages.trimToBudget(messages, prefs.getInt("model_max_context", 32768));
       JSONObject body = new JSONObject().put("model", model).put("temperature", temperature)
           .put("stream", false).put("messages", messages);
       try (OutputStream output = connection.getOutputStream()) {
@@ -257,10 +311,18 @@ final class DesktopPetReplyEngine {
       if (choices == null || choices.length() == 0) throw new IllegalStateException("接口未返回内容");
       JSONObject message = choices.optJSONObject(0).optJSONObject("message");
       if (message == null) throw new IllegalStateException("接口未返回消息正文");
-      return message.optString("content", "");
+      Object content = message.opt("content");
+      return content instanceof String ? (String) content : "";
     } finally {
       connection.disconnect();
     }
+  }
+
+  /** 会话覆盖开启时原样生效（含留空=明确不用）；否则角色卡有内容用角色卡，都没有时回退公共内容。 */
+  private static String effectiveContent(boolean override, String own, String cardValue, String commonValue) {
+    if (override) return own == null ? "" : own;
+    if (cardValue != null && !cardValue.trim().isEmpty()) return cardValue;
+    return commonValue == null ? "" : commonValue;
   }
 
   private static String activeWorldBook(String raw, ArrayList<MainActivity.Msg> messages,

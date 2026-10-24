@@ -63,6 +63,8 @@ public final class Live2DCoreDownloadService extends Service {
         .putInt("live2d_core_download_progress", progress)
         .putString("live2d_core_download_label", label)
         .putString("live2d_core_download_error", error).apply();
+    if (error != null && !error.trim().isEmpty())
+      DiagnosticLog.record(this, "live2d_core_download", "error", error);
     if (running) ((NotificationManager) getSystemService(NOTIFICATION_SERVICE))
         .notify(NOTIFICATION_ID, notification(progress, label));
     sendBroadcast(new Intent(ACTION_STATE_CHANGED).setPackage(getPackageName()));

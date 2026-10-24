@@ -7,6 +7,8 @@ import android.security.keystore.KeyProperties;
 import android.util.Base64;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
@@ -27,17 +29,17 @@ final class SecureStore {
   }
 
   void putNamed(String name, String value) throws Exception {
+    String encoded = encrypt(value, key());
+    prefs.edit().putString(name, encoded).apply();
+  }
+
+  private static String encrypt(String value, SecretKey secretKey) throws Exception {
     Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-    cipher.init(Cipher.ENCRYPT_MODE, key());
+    cipher.init(Cipher.ENCRYPT_MODE, secretKey);
     byte[] encrypted = cipher.doFinal(value.getBytes(StandardCharsets.UTF_8));
-    prefs
-        .edit()
-        .putString(
-            name,
-            Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP)
-                + "."
-                + Base64.encodeToString(encrypted, Base64.NO_WRAP))
-        .apply();
+    return Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP)
+        + "."
+        + Base64.encodeToString(encrypted, Base64.NO_WRAP);
   }
 
   String get() {
@@ -72,12 +74,17 @@ final class SecureStore {
   }
 
   void importPlain(JSONObject values) throws Exception {
-    clear();
+    SecretKey secretKey = key();
+    Map<String, String> encoded = new LinkedHashMap<>();
     java.util.Iterator<String> names = values.keys();
     while (names.hasNext()) {
       String name = names.next();
-      putNamed(name, values.optString(name));
+      encoded.put(name, encrypt(values.optString(name), secretKey));
     }
+    SharedPreferences.Editor editor = prefs.edit().clear();
+    for (Map.Entry<String, String> entry : encoded.entrySet())
+      editor.putString(entry.getKey(), entry.getValue());
+    if (!editor.commit()) throw new IllegalStateException("无法写入加密设置");
   }
 
   private SecretKey key() throws Exception {

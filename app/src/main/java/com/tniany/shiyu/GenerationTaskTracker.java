@@ -53,9 +53,7 @@ final class GenerationTaskTracker {
   }
 
   static void fail(Context context, String id, Throwable error) {
-    String message=error==null?"未知错误":error.getMessage()==null?error.toString():error.getMessage();
-    if(message.length()>600)message=message.substring(0,600)+"…";
-    String finalMessage=message;
+    String finalMessage=MainActivity.friendlyError(error);
     mutate(context,id,value->value.put("status","failed").put("error",finalMessage)
         .put("detail","生成失败").put("updatedAt",System.currentTimeMillis()).put("cancellable",false));
   }
@@ -108,6 +106,7 @@ final class GenerationTaskTracker {
   private static JSONArray parse(String value){try{return new JSONArray(value);}catch(Exception ignored){return new JSONArray();}}
 
   private static void save(Context context,JSONArray values){
+    if (MainActivity.isDataRescueRequired(context)) return;
     SharedPreferences prefs=context.getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE);
     prefs.edit().putString(KEY,values.toString()).putLong(REVISION,System.currentTimeMillis()).apply();
     context.sendBroadcast(new Intent(ACTION_CHANGED).setPackage(context.getPackageName()));

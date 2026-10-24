@@ -3,16 +3,29 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+configurations {
+    llamatikNatives
+}
+
+def llamatikNativeDir = layout.buildDirectory.dir('generated/llamatik-jni-arm64')
+def extractLlamatikNatives = tasks.register('extractLlamatikNatives', Sync) {
+    from { configurations.llamatikNatives.collect { zipTree(it) } }
+    include 'jni/arm64-v8a/**'
+    eachFile { details -> details.path = details.path.substring('jni/'.length()) }
+    includeEmptyDirs = false
+    into llamatikNativeDir
+}
+
 android {
     namespace 'com.tniany.shiyu'
     compileSdk 36
 
     defaultConfig {
         applicationId 'com.tniany.shiyu'
-        minSdk 23
+        minSdk 24
         targetSdk 33
-        versionCode 25
-        versionName '0.7.2'
+        versionCode 61
+        versionName '0.9.5'
     }
 
     compileOptions {
@@ -28,6 +41,7 @@ android {
     defaultConfig {
         buildConfigField 'String', 'OPEN_EVENT_URL', '"https://shiy.tniay.top/api/open"'
         buildConfigField 'String', 'UPDATE_MANIFEST_URL', '"https://shiy.tniay.top/version.json"'
+        buildConfigField 'String', 'ANNOUNCEMENT_URL', '"https://web-shiy.tniay.top/api/announcements"'
         buildConfigField 'String', 'FEEDBACK_API_URL', '"https://shiy.tniay.top/api/feedback"'
         buildConfigField 'String', 'FEEDBACK_PAGE_URL', '"https://shiy.tniay.top/internal/feedback-4d27c9"'
     }
@@ -62,6 +76,37 @@ android {
     lint {
         checkReleaseBuilds false
     }
+
+    sourceSets {
+        main.jniLibs.srcDir(llamatikNativeDir)
+    }
+}
+
+tasks.named('preBuild').configure {
+    dependsOn extractLlamatikNatives
+}
+
+// Windows JDK 17 reads Gradle worker argument files using the native encoding.
+// Stage non-ASCII classpath entries so unit tests also run from Chinese paths.
+tasks.withType(Test).configureEach {
+    doFirst {
+        if (System.getProperty('os.name').startsWith('Windows')
+                && classpath.files.any { !java.nio.charset.StandardCharsets.US_ASCII.newEncoder().canEncode(it.absolutePath) }) {
+            def runtimeRoot = new File(gradle.gradleUserHomeDir,
+                    "shiyu-test-runtime/${Integer.toHexString(rootDir.absolutePath.hashCode())}/${name}")
+            def staged = []
+            classpath.files.eachWithIndex { entry, index ->
+                if (!java.nio.charset.StandardCharsets.US_ASCII.newEncoder().canEncode(entry.absolutePath)) {
+                    def destination = new File(runtimeRoot, index.toString())
+                    project.sync { from entry; into destination }
+                    staged.add(entry.isDirectory() ? destination : new File(destination, entry.name))
+                } else {
+                    staged.add(entry)
+                }
+            }
+            classpath = files(staged)
+        }
+    }
 }
 
 dependencies {
@@ -72,7 +117,12 @@ dependencies {
     implementation 'androidx.compose.ui:ui-tooling-preview'
     implementation 'androidx.compose.material3:material3'
     implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'com.google.guava:listenablefuture:1.0'
     implementation 'com.alphacephei:vosk-android:0.3.47'
     implementation 'com.google.zxing:core:3.5.3'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    llamatikNatives('com.llamatik:library-android:1.9.0') { transitive = false }
     debugImplementation 'androidx.compose.ui:ui-tooling'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
 }

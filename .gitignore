@@ -16,6 +16,10 @@ captures/
 *.dex
 *.class
 
+# Windows desktop build artifacts
+/release/windows/
+/web/downloads/windows/*.part*
+
 # IDE
 .idea/
 *.iml

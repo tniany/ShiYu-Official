@@ -14,6 +14,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -22,14 +23,21 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 /** Generates opted-in role messages while the app is in the background. */
 public final class ActiveReplyWorker extends JobService {
   private static final int JOB_ID = 0x53485955;
+  private volatile Thread runningThread;
 
   static void sync(Context context) {
+    if (MainActivity.isDataRescueRequired(context)) {
+      cancel(context);
+      return;
+    }
     SharedPreferences prefs = context.getSharedPreferences(MainActivity.PREF, Context.MODE_PRIVATE);
     JobScheduler scheduler = (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
     if (!prefs.getBoolean("active_replies", false)) {
@@ -44,25 +52,50 @@ public final class ActiveReplyWorker extends JobService {
     scheduler.schedule(job);
   }
 
+  static void cancel(Context context) {
+    JobScheduler scheduler = (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+    if (scheduler != null) scheduler.cancel(JOB_ID);
+  }
+
   @Override public boolean onStartJob(JobParameters params) {
-    new Thread(() -> {
-      runOnce(getApplicationContext(), false);
-      jobFinished(params, false);
-    }, "shiyu-active-reply").start();
+    Thread worker = new Thread(() -> {
+      Context context = getApplicationContext();
+      CrashProtection.markFeatureActive(context, CrashProtection.FEATURE_ACTIVE_REPLIES);
+      try {
+        runOnce(context, false);
+      } finally {
+        if (runningThread == Thread.currentThread()) runningThread = null;
+        CrashProtection.clearFeatureActive(context, CrashProtection.FEATURE_ACTIVE_REPLIES);
+        jobFinished(params, false);
+      }
+    }, "shiyu-active-reply");
+    runningThread = worker;
+    worker.start();
     return true;
   }
 
   @Override public boolean onStopJob(JobParameters params) {
-    return true;
+    Thread worker = runningThread;
+    runningThread = null;
+    if (worker != null) worker.interrupt();
+    return !MainActivity.isDataRescueRequired(this);
   }
 
   static void runYandere(Context context) {
-    runOnce(context.getApplicationContext(), true);
+    Context app = context.getApplicationContext();
+    CrashProtection.markFeatureActive(app, CrashProtection.FEATURE_ACTIVE_REPLIES);
+    try {
+      runOnce(app, true);
+    } finally {
+      CrashProtection.clearFeatureActive(app, CrashProtection.FEATURE_ACTIVE_REPLIES);
+    }
   }
 
   private static synchronized void runOnce(Context context, boolean yandereOnly) {
     SharedPreferences prefs = context.getSharedPreferences(MainActivity.PREF, Context.MODE_PRIVATE);
-    if (!prefs.getBoolean("active_replies", false) || prefs.getBoolean("app_in_foreground", false)
+    long writeEpoch = MainActivity.dataWriteEpoch(context);
+    if (Thread.currentThread().isInterrupted() || MainActivity.isDataRescueRequired(context)
+        || !prefs.getBoolean("active_replies", false) || prefs.getBoolean("app_in_foreground", false)
         || prefs.getLong("active_generation_until", 0) > System.currentTimeMillis())
       return;
     SecureStore secure = new SecureStore(context);
@@ -96,16 +129,26 @@ public final class ActiveReplyWorker extends JobService {
         for (int part = 0; part < burst; part++) {
           MainActivity.Card speaker = chat.group && chat.groupAutonomous ? randomGroupCard(cards, chat, lastCard.id) : card;
           if (speaker == null) speaker = card;
-          String reply = generate(context, endpoint, key, model, prefs, db, chat, speaker);
-          MainActivity.Msg message = new MainActivity.Msg("assistant", reply);
-          message.speakerCardId = speaker.id;
-          if (chat.ttsEnabled) {
-            if (chat.ttsReplyMode == 1) message.displayMode = 1;
-            else if (chat.ttsReplyMode == 2) message.displayMode = 2;
-            else if (chat.ttsReplyMode == 3) message.displayMode = Math.random() < .5 ? 1 : 0;
+          MusicReply parsed = resolveMusicReplies(context,
+              MainActivity.expandReplyMacros(prefs,
+                  generate(context, endpoint, key, model, prefs, db, chat, speaker), speaker), speaker);
+          String reply = parsed.text;
+          if (Thread.currentThread().isInterrupted()
+              || !MainActivity.canWriteData(context, writeEpoch)) return;
+          if (!reply.isEmpty()) {
+            MainActivity.Msg message = new MainActivity.Msg("assistant", reply);
+            message.speakerCardId = speaker.id;
+            if (chat.ttsEnabled) {
+              if (chat.ttsReplyMode == 1) message.displayMode = 1;
+              else if (chat.ttsReplyMode == 2) message.displayMode = 2;
+              else if (chat.ttsReplyMode == 3) message.displayMode = Math.random() < .5 ? 1 : 0;
+            }
+            chat.messages.add(message);
           }
-          chat.messages.add(message);
-          lastReply = reply;
+          chat.messages.addAll(parsed.music);
+          lastReply = reply.isEmpty() && !parsed.music.isEmpty()
+              ? "分享了歌曲《" + parsed.music.get(0).body.substring(0,
+                  Math.min(parsed.music.get(0).body.length(), 60)) + "》" : reply;
           lastCard = speaker;
         }
         chat.updated = now;
@@ -113,6 +156,8 @@ public final class ActiveReplyWorker extends JobService {
         chat.nextProactiveAt = now + randomDelay(chat.proactiveMinMinutes, chat.proactiveMaxMinutes);
         chat.proactiveSequence++;
         chatJson.put(i, chat.json());
+        if (Thread.currentThread().isInterrupted()
+            || !MainActivity.canWriteData(context, writeEpoch)) return;
         db.saveState(root.put("chats", chatJson).toString());
         long revision = Math.max(now, prefs.getLong("background_state_revision", 0) + 1);
         prefs.edit().putLong("background_state_revision", revision).commit();
@@ -122,15 +167,46 @@ public final class ActiveReplyWorker extends JobService {
       prefs.edit().remove("proactive_last_error").apply();
       return;
     } catch (Exception error) {
-      prefs.edit().putString("proactive_last_error", error.getMessage() == null ? error.toString() : error.getMessage()).apply();
+      if (MainActivity.canWriteData(context, writeEpoch)) {
+        prefs.edit().putString("proactive_last_error", MainActivity.friendlyError(error))
+            .putString("last_api_error", MainActivity.errorDetails(error)).apply();
+        DiagnosticLog.record(context, "active_reply", "error", MainActivity.diagnosticSummary(error));
+      }
       return;
     } finally {
       db.close();
     }
   }
 
+  private static MusicReply resolveMusicReplies(Context context, String source,
+      MainActivity.Card speaker) {
+    String value = source == null ? "" : source;
+    Matcher matcher = Pattern.compile("\\[分享音乐[：:]\\s*([^\\]\\r\\n]{1,300})\\]").matcher(value);
+    StringBuffer cleaned = new StringBuffer();ArrayList<MainActivity.Msg> music = new ArrayList<>();
+    while (matcher.find()) {
+      String[] parts = matcher.group(1).trim().split("\\s*[|｜]\\s*", 3);
+      if (parts.length > 0 && music.size() < 3) try {
+        JSONObject resolved = NeteaseMusicResolver.resolve(context, parts[0],
+            parts.length > 1 ? parts[1] : "");
+        MainActivity.Msg message = new MainActivity.Msg("assistant",
+            resolved.optString("title") + " · " + resolved.optString("artist", "未知歌手"));
+        message.speakerCardId = speaker.id;message.messageType = "music";
+        message.meta = resolved.toString();music.add(message);
+      } catch (Exception ignored) {}
+      matcher.appendReplacement(cleaned, "");
+    }
+    matcher.appendTail(cleaned);
+    return new MusicReply(cleaned.toString().replace("<SEG>", "\n\n").trim(), music);
+  }
+
+  private static final class MusicReply {
+    final String text;final ArrayList<MainActivity.Msg> music;
+    MusicReply(String text, ArrayList<MainActivity.Msg> music) { this.text = text;this.music = music; }
+  }
+
   private static boolean isDue(MainActivity.Chat chat, long now, boolean yandereOnly) {
     if (chat.messages.isEmpty()) return false;
+    if (chat.userBlockedRole || chat.roleBlockedUser) return false;
     if (isQuietHours(chat)) return false;
     if (yandereOnly) return chat.yandereEnabled && now - chat.lastProactiveAt >= 60_000L;
     if (!chat.proactiveEnabled || chat.yandereEnabled) return false;
@@ -166,28 +242,25 @@ public final class ActiveReplyWorker extends JobService {
     try {
     connection.setRequestMethod("POST");
     connection.setConnectTimeout(20_000);
-    connection.setReadTimeout(90_000);
+    connection.setReadTimeout(MainActivity.AI_RESPONSE_TIMEOUT_MS);
     connection.setDoOutput(true);
     connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
     connection.setRequestProperty("Authorization", "Bearer " + key);
     JSONArray messages = new JSONArray();
     String memories = db.memoryContext(card.id);
     String moments = momentsContext(prefs, card.id);
-    String identityDescription = prefs.getString("active_identity_description", "");
-    String identityName = prefs.getString("active_identity_name", "");
-    String identity = identityName.isEmpty() ? identityDescription : identityName + "：" + identityDescription;
+    String identity = MainActivity.identityFor(prefs,chat).prompt();
     String system = "你是 " + card.name + "。" + card.persona
         + (card.desc.isEmpty() ? "" : "\n角色简介：" + card.desc)
         + (identity.isEmpty() ? "" : "\n用户当前身份设定：" + identity)
         + (memories.isEmpty() ? "" : "\n长期记忆：\n" + memories)
         + (moments.isEmpty() ? "" : "\n用户已授权你查看最近朋友圈：\n" + moments)
         + (chat.summary.isEmpty() ? "" : "\n此前摘要：\n" + chat.summary)
+        + "\n当你确实想主动分享歌曲时，可在正文末尾追加 [分享音乐：歌名|歌手]。应用会从网易云搜索真实歌曲、封面和音源；不要编造链接，也不要解释这个内部指令。"
         + screenTimeContext(context, chat);
     messages.put(new JSONObject().put("role", "system").put("content", system));
     int count = prefs.getInt("context", 30);
-    for (int i = Math.max(0, chat.messages.size() - count); i < chat.messages.size(); i++) {
-      MainActivity.Msg message = chat.messages.get(i);
-      if (!message.image.isEmpty()) continue;
+    for (MainActivity.Msg message : ChatRequestMessages.recent(chat.messages, count)) {
       String role = message.role;
       String content = message.body;
       if (chat.group && "assistant".equals(role) && !message.speakerCardId.isEmpty()
@@ -195,12 +268,15 @@ public final class ActiveReplyWorker extends JobService {
         role = "user";
         content = "群聊中的另一位成员说：" + content;
       }
-      messages.put(new JSONObject().put("role", role).put("content", content));
+      if ((content == null || content.trim().isEmpty()) && !message.image.isEmpty())
+        content = "[分享了一张图片，当前请求未包含图片内容]";
+      ChatRequestMessages.append(messages, role, content);
     }
     messages.put(new JSONObject().put("role", "user").put("content", chat.group && chat.groupActiveTopics
         ? "这是一个真实群聊。结合自己的关系、时间和最近对话，自然接续讨论或主动开启一个合适的新话题。不要替其他角色发言，不要解释任务，只输出自己的消息正文。"
         : "结合关系、时间和最近对话，主动发来一条自然的新消息。不要解释任务，不要重复上一句话，只输出角色消息正文。"));
     double temperature = Double.longBitsToDouble(prefs.getLong("temp", Double.doubleToLongBits(.85)));
+    ChatRequestMessages.trimToBudget(messages, prefs.getInt("model_max_context", 32768));
     JSONObject body = new JSONObject().put("model", model).put("temperature", temperature)
         .put("stream", false).put("messages", messages);
     try (OutputStream output = connection.getOutputStream()) {
@@ -209,8 +285,10 @@ public final class ActiveReplyWorker extends JobService {
     int code = connection.getResponseCode();
     String raw = read(code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream());
     if (code < 200 || code >= 300) throw new IllegalStateException("HTTP " + code + (raw.isEmpty() ? "" : "：" + raw));
-    return new JSONObject(raw).getJSONArray("choices").getJSONObject(0)
-        .getJSONObject("message").getString("content").trim();
+    String content = MainActivity.jsonText(new JSONObject(raw).getJSONArray("choices")
+        .getJSONObject(0).getJSONObject("message"), "content").trim();
+    if (content.isEmpty()) throw new IOException("接口未返回消息正文");
+    return content;
     } finally {
       connection.disconnect();
     }

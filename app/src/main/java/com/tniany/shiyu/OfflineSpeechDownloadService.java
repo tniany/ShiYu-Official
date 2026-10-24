@@ -62,6 +62,8 @@ public final class OfflineSpeechDownloadService extends Service {
         .putInt("offline_stt_download_progress", progress)
         .putString("offline_stt_download_label", label)
         .putString("offline_stt_download_error", error).apply();
+    if (error != null && !error.trim().isEmpty())
+      DiagnosticLog.record(this, "offline_stt_download", "error", error);
     if (running) ((NotificationManager) getSystemService(NOTIFICATION_SERVICE))
         .notify(NOTIFICATION_ID, notification(progress, label));
     sendBroadcast(new Intent(ACTION_STATE_CHANGED).setPackage(getPackageName()));
