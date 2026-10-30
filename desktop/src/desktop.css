@@ -1,0 +1,119 @@
+/* System fonts keep the packaged interface available without a font CDN. */
+:root {
+  --font-sans: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  --fs-3xl: 32px;
+  --fs-4xl: 40px;
+}
+body, input, textarea, select, button {
+  font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+}
+* {
+  letter-spacing: 0;
+}
+.app-shell, .main-shell {
+  overflow: clip;
+}
+.sidebar {
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+}
+@media (min-width: 721px) and (max-height: 760px) {
+  .sidebar {
+    padding-top: 16px;
+    padding-bottom: 12px;
+  }
+  .primary-nav .nav-item {
+    min-height: 42px;
+  }
+  .primary-nav {
+    margin-bottom: 16px;
+  }
+  .brand-lockup {
+    padding-bottom: 12px;
+  }
+}
+.main-shell > .announcement-banner {
+  flex: 0 0 auto;
+  max-height: 140px;
+  overflow: auto;
+}
+.main-shell > .view {
+  flex: 1 1 0;
+  height: auto;
+}
+.conversation-list {
+  grid-template-columns: minmax(0, 1fr);
+  overflow-x: hidden;
+}
+.conversation-item {
+  min-width: 0;
+  width: 100%;
+}
+.conversation-copy-top {
+  min-width: 0;
+}
+.desktop-update-section {
+  border-color: rgba(76, 147, 126, .26);
+}
+.desktop-update-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(76, 147, 126, .2);
+  border-radius: 8px;
+  background: rgba(237, 245, 241, .62);
+}
+.desktop-update-copy {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.desktop-update-copy > svg {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  color: #3f8a72;
+}
+.desktop-update-copy div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.desktop-update-copy span,
+.desktop-update-copy small {
+  color: #71817b;
+}
+.desktop-update-copy small {
+  white-space: pre-wrap;
+}
+.desktop-update-progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(76, 147, 126, .16);
+}
+.desktop-update-progress i {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #3f8a72;
+  transition: width .2s ease;
+}
+@media (min-width: 721px) and (max-width: 1100px) {
+  .sidebar {
+    width: 208px;
+    flex-basis: 208px;
+  }
+  .view-chat {
+    grid-template-columns: 218px minmax(0, 1fr);
+  }
+  .conversation-rail {
+    padding-inline: 12px;
+  }
+  .conversation-rail .search-field > span {
+    display: none;
+  }
+}

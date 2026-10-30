@@ -1,0 +1,26 @@
+{
+  "name": "时遇 Web",
+  "short_name": "时遇",
+  "description": "角色智能体、聊天、朋友圈、世界书与正则的本地优先网页应用。",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f8f4",
+  "theme_color": "#111815",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "./assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

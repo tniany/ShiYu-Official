@@ -1,0 +1,36 @@
+name = "shiyu-character-square"
+main = "src/index.ts"
+compatibility_date = "2025-07-12"
+workers_dev = true
+
+[assets]
+directory = "../web"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "shiyu-character-square"
+database_id = "a16682c9-2360-415f-b02e-2f4337f9313a"
+migrations_dir = "migrations"
+
+[[d1_databases]]
+binding = "USAGE_DB"
+database_name = "shiyu-usage"
+database_id = "2ba2d8c9-2e86-446f-9a64-ff345ee212ed"
+
+[[services]]
+binding = "AUTH_SERVICE"
+service = "oldc-qq-auth"
+
+[vars]
+AUTH_ISSUER = "https://liminoldc.suify.cn"
+AUTH_CLIENT_ID = "shiyu-square"
+APP_ORIGIN = "https://web-shiy.tniay.top"
+ADMIN_ROUTE = "manage-54bddbf9d11e466aba"
+
+[[routes]]
+pattern = "web-shiy.tniay.top"
+zone_name = "tniay.top"
+custom_domain = true

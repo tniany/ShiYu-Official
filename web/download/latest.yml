@@ -1,0 +1,8 @@
+version: 0.2.7
+files:
+  - url: Shiyu-0.2.7-win-x64-Setup.exe
+    sha512: yoLqEVHOCXssgORSuq+ta0KDUdvGt9/Rg3aqUMp7DIP50ymbUAOTcX9R2ya2u9a/3/NYDWEZsrlsfIZpmZF97w==
+    size: 114524161
+path: Shiyu-0.2.7-win-x64-Setup.exe
+sha512: yoLqEVHOCXssgORSuq+ta0KDUdvGt9/Rg3aqUMp7DIP50ymbUAOTcX9R2ya2u9a/3/NYDWEZsrlsfIZpmZF97w==
+releaseDate: '2026-09-27T07:18:55.275Z'

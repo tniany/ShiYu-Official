@@ -27,3 +27,38 @@ captures/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local diagnostics and build tools
+/.apk-verify/
+/.website-patch/
+/.wrangler/
+/.zcode/
+/decompiled/
+/jadx-run/
+/promo-video/
+/.MainActivity-truncated-backup.java
+/.autofix.js
+/.blob*.txt
+/.diag*.js
+/.errors.txt
+/.fix-*.js
+/.scan-blobs.js
+/build-*.log
+/cfr.jar
+/cloudflared.exe
+/dex2jar.zip
+/jadx.zip
+/device_screen.png
+
+# Generated release packages and download fragments
+/release/shiyu-web-*.zip
+/release/shiyu-web-*/
+/web/downloads/
+
+# Local tool state
+/desktop/node_modules/
+/desktop/test-results/
+/square-worker/.auth-config/
+/square-worker/.wrangler/
+/square-worker/.wrangler-*.log
+/square-worker/build/

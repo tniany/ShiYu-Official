@@ -1,0 +1,43 @@
+{
+  "version": "0.9.4",
+  "version_code": 60,
+  "apk_url": "https://web-shiy.tniay.top/downloads/shiyu-0.9.4.apk?v=60",
+  "sha256": "FC3A9F4EF6D99A07BFE87D0626689076B72F8A0F28324C9135C3FB3F741FB9B0",
+  "release_notes": "0.9.4 正式版：0.9.0-0.9.3 用户建议立刻更新。优化网易云音乐并修复播放、一起听歌会话串联问题；修复上下文丢失和空消息问题；优化角色 MCP 调用与对话体验。",
+  "release_history": [
+    {
+      "version": "0.9.4",
+      "version_code": 60,
+      "date": "2026-09-25",
+      "apk_url": "https://web-shiy.tniay.top/downloads/shiyu-0.9.4.apk?v=60",
+      "sha256": "FC3A9F4EF6D99A07BFE87D0626689076B72F8A0F28324C9135C3FB3F741FB9B0"
+    },
+    {
+      "version": "0.9.3",
+      "version_code": 59,
+      "date": "2026-09-25",
+      "apk_url": "https://web-shiy.tniay.top/downloads/shiyu-0.9.3.apk?v=59",
+      "sha256": "99B52193D81B030B9CDE988F665FADF9DC5994A52154DFE93DEA653CBE36C64F"
+    },
+    {
+      "version": "0.9.1",
+      "version_code": 55,
+      "date": "2026-09-19",
+      "apk_url": "https://github.com/tniany/shiyu-releases/releases/download/v0.9.1/shiyu-0.9.1.apk",
+      "sha256": "CAD016F0FD87F346315190636F0F1C5866699619C41F3C2D0C0BB9418A171395"
+    },
+    {
+      "version": "0.9.0",
+      "version_code": 51,
+      "date": "2026-09-13",
+      "apk_url": "https://shiy.tniay.top/downloads/shiyu-0.9.0.apk?v=51",
+      "sha256": "AFF587D69A25CE32B65517EC6041313D2805F4248B03697CFBDAE2104943054C"
+    },
+    {
+      "version": "0.8.1",
+      "version_code": 47,
+      "date": "2026-08-15",
+      "apk_url": "https://shiy.tniay.top/downloads/shiyu-0.8.1.apk?v=47"
+    }
+  ]
+}

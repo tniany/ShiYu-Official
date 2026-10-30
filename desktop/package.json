@@ -1,0 +1,85 @@
+{
+  "name": "shiyu-desktop",
+  "productName": "时遇",
+  "version": "0.2.7",
+  "description": "时遇 Windows 桌面客户端",
+  "author": "时遇",
+  "private": true,
+  "main": "src/main.cjs",
+  "scripts": {
+    "prepare:web": "node scripts/prepare.cjs",
+    "start": "npm run prepare:web && electron .",
+    "test": "node --test test/*.test.cjs",
+    "test:smoke": "node scripts/smoke.cjs",
+    "dist": "npm run prepare:web && npm test && electron-builder --win nsis --x64 && node scripts/release-info.cjs",
+    "pack": "npm run prepare:web && electron-builder --win --x64 --dir"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "cheerio": "1.2.0",
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3",
+    "lucide": "1.48.0",
+    "png-to-ico": "3.0.1"
+  },
+  "build": {
+    "appId": "top.tniay.shiyu.desktop",
+    "productName": "时遇",
+    "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "../release/windows",
+      "buildResources": "resources"
+    },
+    "files": [
+      "src/**/*.cjs",
+      "resources/icon.ico",
+      "resources/icon.png",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://web-shiy.tniay.top/downloads/windows/"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.ico",
+      "executableName": "Shiyu",
+      "artifactName": "Shiyu-${version}-win-${arch}-Setup.${ext}",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "时遇",
+      "uninstallDisplayName": "时遇",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ],
+      "language": "2052",
+      "displayLanguageSelector": false,
+      "installerIcon": "resources/icon.ico",
+      "uninstallerIcon": "resources/icon.ico"
+    }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  }
+}

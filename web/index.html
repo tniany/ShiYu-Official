@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <!-- 明确声明本站自己管配色，阻止浏览器自动暗色反转 -->
+  <meta name="color-scheme" content="light dark" />
+  <meta name="darkreader-lock" />
+  <meta name="theme-color" content="#fdf6f8" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#16111a" media="(prefers-color-scheme: dark)" />
+  <meta name="application-name" content="时遇 Web" />
+  <meta name="shiyu-version" content="1.4.15" />
+  <title>时遇</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./assets/icon-192.png" />
+  <link rel="apple-touch-icon" href="./assets/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Quicksand:wght@500;600;700&family=Playfair+Display:wght@600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css?v=1.4.15" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-lockup">
+        <div class="brand-mark"><img src="./assets/character.png" alt="时遇" /></div>
+        <div>
+          <div class="brand-name">时遇</div>
+        </div>
+        <button class="icon-button sidebar-close" data-action="close-sidebar" title="关闭侧栏"><i data-lucide="x"></i></button>
+      </div>
+
+      <nav class="primary-nav" aria-label="主导航">
+        <button class="nav-item active" data-view="chat"><i data-lucide="message-circle"></i><span>聊天</span></button>
+        <button class="nav-item" data-view="roles"><i data-lucide="users-round"></i><span>角色卡</span><span class="nav-count" id="role-count">0</span></button>
+        <button class="nav-item" data-view="square"><i data-lucide="store"></i><span>角色卡广场</span></button>
+        <button class="nav-item" data-view="moments"><i data-lucide="sparkles"></i><span>朋友圈</span></button>
+        <button class="nav-item" data-view="world"><i data-lucide="orbit"></i><span>小世界</span></button>
+        <button class="nav-item" data-view="rules"><i data-lucide="book-open-text"></i><span>世界书 / 正则</span></button>
+        <button class="nav-item" data-view="account"><i data-lucide="circle-user-round"></i><span>个人中心</span></button>
+        <button class="nav-item" data-view="settings"><i data-lucide="settings-2"></i><span>设置</span></button>
+      </nav>
+
+      <div class="sidebar-section-label"><span>最近角色</span><button class="text-button" data-action="open-role-modal"><i data-lucide="plus"></i>添加</button></div>
+      <div class="sidebar-roles" id="sidebar-roles"></div>
+      <div class="sidebar-footer">
+        <a class="text-button" href="/download/" target="_blank" rel="noopener"><i data-lucide="monitor-down"></i>下载时遇 · 多平台</a>
+        <div class="cloud-account" id="cloud-account">
+          <button class="cloud-account-main" data-action="cloud-login" type="button">
+            <span class="cloud-account-icon"><i data-lucide="cloud"></i></span>
+            <span class="cloud-account-copy"><strong>登录</strong><small>登录后多端同步数据</small></span>
+            <i data-lucide="chevron-right" class="cloud-account-arrow"></i>
+          </button>
+        </div>
+        <button class="status-dot" data-view="settings" title="模型连接设置"><span></span><span id="mode-status">未连接模型</span></button>
+      </div>
+    </aside>
+
+    <main class="main-shell">
+      <button class="sidebar-reopen" data-action="open-sidebar" title="打开侧栏"><i data-lucide="panel-left-open"></i></button>
+      <header class="mobile-header">
+        <button class="icon-button" data-action="open-sidebar" title="打开侧栏"><i data-lucide="menu"></i></button>
+        <div class="mobile-brand"><span class="brand-dot"></span>时遇</div>
+        <div class="mobile-header-actions"><button class="icon-button" data-action="toggle-fullscreen" title="切换全屏"><i data-lucide="maximize"></i></button><button class="icon-button" data-action="open-settings" title="打开设置"><i data-lucide="sliders-horizontal"></i></button></div>
+      </header>
+      <div class="announcement-banner hidden" id="announcement-banner"></div>
+
+      <section class="view view-chat active" id="view-chat">
+        <div class="conversation-rail">
+          <div class="rail-header">
+            <div>
+                            <h1>聊天</h1>
+            </div>
+            <div class="rail-header-actions"><button class="primary-icon-button" data-action="new-chat" title="新建会话"><i data-lucide="square-pen"></i></button><button class="icon-button" data-action="new-group-chat" title="新建群聊"><i data-lucide="users-round"></i></button></div>
+          </div>
+          <label class="search-field"><i data-lucide="search"></i><input id="chat-search" type="search" placeholder="搜索会话" /><span>⌘K</span></label>
+          <div class="rail-filter"><button class="filter-chip active" data-filter="all">全部</button><button class="filter-chip" data-filter="pinned">置顶</button></div>
+          <div class="conversation-list" id="conversation-list"></div>
+          <div class="rail-empty" id="rail-empty"><i data-lucide="message-square-plus"></i><strong>还没有会话</strong><span>从左侧选择角色开始聊天</span><button class="text-button" data-view="roles">浏览角色卡 <i data-lucide="arrow-up-right"></i></button></div>
+        </div>
+
+        <div class="chat-panel" id="chat-panel">
+          <div class="chat-welcome" id="chat-welcome">
+            <div class="welcome-portrait"><img src="./assets/character.png" alt="角色插画" /></div>
+                        <h2>和一个角色，<em>好好说话。</em></h2>
+            <p>导入你的角色卡，或从一位熟悉的角色开始。登录后可在多台设备同步使用。</p>
+            <div class="welcome-actions"><button class="button primary" data-action="new-chat"><i data-lucide="message-circle-plus"></i>开始一段新对话</button><button class="button quiet" data-view="roles">查看角色卡</button></div>
+          </div>
+          <div class="chat-active hidden" id="chat-active">
+            <header class="chat-header">
+              <div class="chat-role-summary"><button class="icon-button mobile-chat-back" data-action="back-to-chats" title="返回会话列表"><i data-lucide="arrow-left"></i></button><div class="avatar avatar-role" id="chat-avatar"></div><div><h2 id="chat-role-name">角色</h2><div class="chat-presence"><span class="presence-dot"></span><span id="chat-role-status">随时可以聊天</span></div><div class="chat-members" id="chat-members"></div></div></div>
+        <div class="chat-header-actions"><button class="icon-button" data-action="toggle-pin-chat" title="置顶会话"><i data-lucide="pin"></i></button><button class="icon-button" data-action="new-chat" title="新建会话"><i data-lucide="message-square-plus"></i></button><button class="icon-button" data-action="search-chat-messages" title="搜索当前会话"><i data-lucide="search"></i></button><button class="icon-button" data-action="rename-chat" title="重命名会话"><i data-lucide="pencil"></i></button><button class="icon-button" data-action="export-chat" title="导出会话"><i data-lucide="download"></i></button><button class="icon-button" data-action="import-chat" title="导入会话"><i data-lucide="upload"></i></button><button class="icon-button" data-action="open-chat-rules" title="世界书与正则"><i data-lucide="book-open-text"></i></button><button class="icon-button" data-action="toggle-chat-info" title="会话详情"><i data-lucide="info"></i></button></div>
+            </header>
+            <div class="message-scroll" id="message-scroll"><div class="date-divider"><span>今天</span></div><div id="message-list"></div><div class="typing-indicator hidden" id="typing-indicator"><span></span><span></span><span></span></div></div>
+            <div class="composer-wrap">
+              <div class="composer-tools"><button class="icon-button" data-action="attach-image" title="添加图片"><i data-lucide="image-plus"></i></button><button class="icon-button" data-action="attach-audio" title="发送语音或音频"><i data-lucide="mic"></i></button><button class="icon-button" data-action="toggle-stickers" title="表情"><i data-lucide="smile-plus"></i></button><button class="icon-button" data-action="open-chat-tools" title="更多消息"><i data-lucide="paperclip"></i></button><button class="icon-button" data-action="toggle-prompts" title="快捷提示"><i data-lucide="lightbulb"></i></button><button class="icon-button" data-action="generate-suggestions" title="推荐回复"><i data-lucide="sparkles"></i></button><span class="composer-hint" id="composer-hint">请在设置中配置模型后开始聊天</span><select class="chat-model-select" id="chat-provider-select" title="当前会话模型配置"></select><button class="icon-button" data-action="toggle-chat-options" title="对话设置"><i data-lucide="sliders-horizontal"></i></button><button class="icon-button" data-action="clear-chat" title="清空会话"><i data-lucide="eraser"></i></button></div>
+              <div class="prompt-popover hidden" id="prompt-popover"><button data-prompt="请温柔地回应我刚才的话">温柔回应</button><button data-prompt="请用更具体的细节继续这个话题">展开细节</button><button data-prompt="请换一种更轻松自然的语气">换个语气</button><button data-prompt="请总结一下我们刚才聊到的内容">总结对话</button></div>
+              <div class="sticker-popover hidden" id="sticker-popover"></div>
+              <div class="reply-suggestions hidden" id="reply-suggestions"></div>
+              <div class="composer"><textarea id="message-input" rows="1" placeholder="写下你想说的话..." aria-label="消息内容"></textarea><button class="send-button" data-action="send-message" title="发送消息"><i data-lucide="arrow-up"></i></button><button class="send-button stop hidden" data-action="stop-generation" title="停止生成"><i data-lucide="square"></i></button></div>
+              <div class="composer-foot"><span>Enter 发送 · Shift + Enter 换行</span></div>
+            </div>
+          </div>
+        </div>
+        <aside class="chat-info hidden" id="chat-info"><div class="info-heading"><span>会话详情</span><button class="icon-button" data-action="toggle-chat-info" title="关闭详情"><i data-lucide="x"></i></button></div><div id="chat-info-content"></div><div class="chat-options" id="chat-options"><label><input type="checkbox" data-chat-option="markdownEnabled" checked />启用 Markdown</label><label><input type="checkbox" data-chat-option="showThinking" checked />显示思考状态</label><label><input type="checkbox" data-chat-option="enterToSend" checked />Enter 发送</label><label><input type="checkbox" data-chat-option="segmentedRepliesEnabled" />允许分段回复</label><label><input type="checkbox" data-chat-option="autoScrollAfterSend" checked />发送后自动滚动</label><details class="chat-content-rules"><summary>世界书与正则覆盖</summary><label><input type="checkbox" id="chat-world-book-override" />覆盖角色世界书</label><textarea class="form-input form-textarea code-input" id="chat-world-book" rows="6" placeholder="世界书 JSON 或文本"></textarea><div class="visual-rule-section compact"><div class="visual-rule-heading"><strong>可视化条目</strong><button type="button" class="button small quiet" data-rule-action="add-world" data-rule-prefix="chat"><i data-lucide="plus"></i>添加</button></div><div class="visual-rule-list" id="chat-world-book-visual"></div></div><label><input type="checkbox" id="chat-regex-override" />覆盖角色正则</label><textarea class="form-input form-textarea code-input" id="chat-regex-rules" rows="5" placeholder="正则规则 JSON"></textarea><label><input type="checkbox" id="chat-preset-override" />覆盖角色预设</label><textarea class="form-input form-textarea" id="chat-preset" rows="4" placeholder="当前会话的预设文本"></textarea><label class="visual-field">本对话用户身份<textarea class="form-input form-textarea" id="chat-identity" rows="3" placeholder="角色在这段对话中如何认识你"></textarea></label><label class="visual-field">对话摘要<textarea class="form-input form-textarea" id="chat-summary" rows="3" placeholder="用于压缩较早的上下文"></textarea></label><label class="visual-field">长期记忆<textarea class="form-input form-textarea" id="chat-long-memory" rows="3" placeholder="始终提供给角色的重要记忆"></textarea></label><div class="visual-rule-section compact"><div class="visual-rule-heading"><strong>可视化规则</strong><button type="button" class="button small quiet" data-rule-action="add-regex" data-rule-prefix="chat"><i data-lucide="plus"></i>添加</button></div><div class="visual-rule-list" id="chat-regex-rules-visual"></div></div><button class="button small quiet" data-action="save-chat-content"><i data-lucide="save"></i>保存内容规则</button></details><details class="chat-proactive-rules"><summary>主动消息</summary><label><input type="checkbox" id="chat-proactive-enabled" />允许角色主动发消息</label><div class="form-row"><label class="visual-field">最短间隔（分钟）<input class="form-input" id="chat-proactive-min" type="number" min="1" max="1440" value="60" /></label><label class="visual-field">最多跟进次数<input class="form-input" id="chat-proactive-max" type="number" min="1" max="10" value="2" /></label></div><button class="button small quiet" data-action="save-proactive"><i data-lucide="save"></i>保存主动消息</button></details><button class="button small quiet" data-action="edit-group-members"><i data-lucide="users-round"></i>管理群成员</button><button class="button small quiet danger-text" data-action="delete-chat"><i data-lucide="trash-2"></i>删除会话</button></div></aside>
+      </section>
+
+      <section class="view" id="view-roles">
+        <div class="page-wrap"><div class="page-heading"><div><h1>角色卡</h1><p>每一个角色，都有自己的语气、记忆和故事。</p></div><div class="heading-actions"><button class="button quiet" data-action="import-role"><i data-lucide="upload"></i>导入角色卡</button><button class="button primary" data-action="open-role-modal"><i data-lucide="plus"></i>新建角色</button></div></div><div class="role-toolbar"><label class="search-field"><i data-lucide="search"></i><input id="role-search" type="search" placeholder="搜索角色、标签或描述" /></label><div class="toolbar-meta" id="role-meta"></div></div><div class="role-grid" id="role-grid"></div><section class="role-rule-library" id="role-rule-library" aria-label="世界书与正则可视化条目"></section></div>
+      </section>
+
+      <section class="view" id="view-square">
+        <div class="page-wrap square-page"><div class="page-heading"><div><h1>角色卡广场</h1><p>浏览社区角色卡，登录后可以上传、评论和管理自己的作品。</p></div><div class="heading-actions"><button class="button quiet" data-action="square-login"><i data-lucide="log-in"></i>登录 / 验证</button><button class="button primary" data-action="square-publish"><i data-lucide="upload"></i>上传角色卡</button></div></div><div class="square-toolbar"><label class="search-field"><i data-lucide="search"></i><input id="square-search" type="search" placeholder="搜索角色名、简介或标签" /></label><span id="square-session-status" class="square-session-status">未登录</span></div><div class="square-grid" id="square-grid"></div></div>
+      </section>
+
+      <section class="view" id="view-moments">
+        <div class="page-wrap narrow"><div class="page-heading"><div><h1>朋友圈</h1><p>记录你和角色共同生活的片刻。</p></div><div class="heading-actions"><button class="button quiet" data-action="moment-permissions"><i data-lucide="shield-check"></i>角色授权</button><button class="button primary" data-action="new-moment"><i data-lucide="pen-line"></i>发布朋友圈</button></div></div><div class="moments-layout"><div class="moment-compose"><div class="moment-compose-top"><div class="avatar avatar-user">我</div><div><strong id="moment-user-name">分享此刻</strong></div></div><textarea id="moment-input" maxlength="1000" placeholder="分享此刻的想法…"></textarea><div class="moment-image-preview hidden" id="moment-image-preview"></div><div class="moment-compose-tools"><button class="button small quiet" data-action="attach-moment-image"><i data-lucide="image-plus"></i>添加图片</button><span id="moment-length">0 / 1000</span></div><div class="moment-compose-bottom"><span>私密保存 · 登录后同步</span><button class="button small primary" data-action="publish-moment"><i data-lucide="send"></i>发布朋友圈</button></div></div><div class="moment-role-panel" id="moment-role-panel"><div><strong>邀请角色发布</strong><span>调用当前模型，按角色口吻生成一条动态</span></div><button class="button small quiet" data-action="generate-role-moment"><i data-lucide="sparkles"></i>生成动态</button></div><div class="moment-list" id="moment-list"></div></div></div>
+      </section>
+
+      <section class="view" id="view-world">
+        <div class="page-wrap world-page"><div class="page-heading"><div><h1>小世界</h1><p>和角色一起听歌、游戏、专注、旅行与布置共同空间。</p></div><div class="world-role-stack" id="world-role-stack"></div></div><div class="world-tabs"><button class="world-tab active" data-world-tab="home"><i data-lucide="home"></i>家园</button><button class="world-tab" data-world-tab="activity"><i data-lucide="timer"></i>共同活动</button><button class="world-tab" data-world-tab="games"><i data-lucide="gamepad-2"></i>游戏房</button><button class="world-tab" data-world-tab="music"><i data-lucide="music-2"></i>一起听</button><button class="world-tab" data-world-tab="wardrobe"><i data-lucide="shirt"></i>换装间</button></div><div class="world-content" id="world-content"></div></div>
+      </section>
+
+      <section class="view" id="view-rules">
+        <div class="page-wrap rules-page"><div class="page-heading"><div><h1>世界书 / 正则</h1><p>用表单直接管理条目，不需要手写 JSON。修改名称、关键词、内容或表达式后会自动保存回角色卡。</p></div><div class="heading-actions"><button class="button quiet" data-action="scroll-rules-library"><i data-lucide="list-tree"></i>查看可视化条目</button><button class="button primary" data-action="open-role-modal"><i data-lucide="plus"></i>新建角色</button></div></div><div class="rules-role-toolbar" id="rules-role-toolbar"><label><span>当前角色</span><select class="form-input" id="rules-role-select" aria-label="选择要编辑规则的角色"></select></label><div class="rules-role-side"><div class="rules-role-stats" id="rules-role-stats"></div><div class="rules-role-actions" id="rules-role-actions"></div></div></div><div class="rules-quick-tip"><i data-lucide="info"></i><span>世界书按关键词向对话注入设定；正则可在发送前或回复后查找并替换文本。</span></div><section class="common-rules-section" id="common-rules-section" aria-label="公共世界书与正则"><div class="common-rules-card"><div class="common-rules-heading"><div><strong>公共世界书与正则</strong><span>角色和会话都没有配置自己的世界书或正则时，自动使用这里的内容；可视化条目修改后会自动保存。</span></div><button class="button small quiet" data-action="save-common-rules"><i data-lucide="save"></i>保存公共规则</button></div><div class="common-rules-grid"><div class="visual-rule-section"><div class="visual-rule-heading"><strong>公共世界书条目</strong><button type="button" class="button small quiet" data-rule-action="add-world" data-rule-prefix="common"><i data-lucide="plus"></i>添加条目</button></div><p class="visual-rule-help">按关键词命中后注入设定；没有关键词的条目始终生效。</p><textarea class="form-input form-textarea code-input" id="common-world-book" rows="6" placeholder='{"entries":[{"keys":["关键词"],"content":"命中时注入的设定","enabled":true}]}'></textarea><div class="visual-rule-list" id="common-world-book-visual"></div></div><div class="visual-rule-section"><div class="visual-rule-heading"><strong>公共正则规则</strong><button type="button" class="button small quiet" data-rule-action="add-regex" data-rule-prefix="common"><i data-lucide="plus"></i>添加规则</button></div><p class="visual-rule-help">可选择应用在输入、输出或全部内容。</p><textarea class="form-input form-textarea code-input" id="common-regex-rules" rows="5" placeholder='[{"find":"原文本","replace":"替换文本","flags":"g","scope":"output"}]'></textarea><div class="visual-rule-list" id="common-regex-rules-visual"></div></div></div></div></section><section class="role-rule-library rules-library" id="rules-library" aria-label="世界书与正则可视化条目"></section></div>
+      </section>
+
+      <section class="view" id="view-account">
+        <div class="page-wrap account-page"><div class="page-heading"><div><h1>个人中心</h1><p>管理账号、QQ 资料与云端数据。</p></div></div><div id="account-center"></div></div>
+      </section>
+
+      <section class="view" id="view-settings">
+        <div class="page-wrap narrow"><div class="page-heading"><div><h1>设置</h1><p>调整时遇的连接方式和外观。</p></div></div><div class="settings-layout"><div class="settings-nav"><button class="settings-nav-item active" data-settings-tab="connection"><i data-lucide="plug-zap"></i>模型连接</button><button class="settings-nav-item" data-settings-tab="appearance"><i data-lucide="palette"></i>外观</button><button class="settings-nav-item" data-settings-tab="identities"><i data-lucide="badge"></i>身份设定</button><button class="settings-nav-item" data-settings-tab="data"><i data-lucide="database"></i>数据与隐私</button></div><div class="settings-content"><div class="settings-tab active" id="settings-connection"><div class="setting-section-title"><div class="setting-title-row"><div><h2>模型供应商</h2><span>可以保存多组 OpenAI 兼容接口，聊天时单独选择。</span></div><button class="button small quiet" data-action="add-provider"><i data-lucide="plus"></i>添加配置</button></div></div><div class="provider-list" id="provider-list"></div><div class="provider-editor" id="provider-editor"><div class="provider-editor-heading"><div><strong id="provider-editor-name">接口配置</strong><span id="provider-editor-status">修改后保存即可使用</span></div><div class="provider-editor-actions"><button class="icon-button" data-action="duplicate-provider" title="复制配置"><i data-lucide="copy"></i></button><button class="icon-button danger-icon" data-action="delete-provider" title="删除配置"><i data-lucide="trash-2"></i></button></div></div><label class="form-label">配置名称<input class="form-input" id="provider-name" type="text" placeholder="例如：OpenAI 主账号" /></label><label class="form-label">接口地址<input class="form-input" id="api-endpoint" type="url" placeholder="https://api.openai.com/v1" /></label><label class="form-label">API Key<input class="form-input" id="api-key" type="password" placeholder="sk-..." autocomplete="off" /></label><div class="form-row"><label class="form-label">模型<select class="form-input" id="api-model"><option value="">先获取模型列表</option></select></label><label class="form-label">温度<input class="form-input" id="api-temperature" type="number" min="0" max="2" step="0.1" /></label></div><div class="model-actions"><button class="button quiet" data-action="fetch-models"><i data-lucide="refresh-cw"></i>获取模型列表</button><span class="model-count" id="model-count"></span></div><div class="setting-actions"><button class="button primary" data-action="save-settings"><i data-lucide="check"></i>保存当前配置</button><button class="button quiet" data-action="test-api"><i data-lucide="radio"></i>测试连接</button><span class="setting-feedback" id="api-feedback"></span></div></div></div><div class="settings-tab" id="settings-appearance"><div class="setting-section-title"><h2>界面外观</h2><span>选择更适合你的阅读方式。</span></div><div class="appearance-options"><button class="appearance-option" data-theme-choice="light"><span class="theme-preview light-preview"></span><strong>明亮</strong><span>清爽、轻盈</span></button><button class="appearance-option" data-theme-choice="dark"><span class="theme-preview dark-preview"></span><strong>深色</strong><span>安静、沉浸</span></button><button class="appearance-option" data-theme-choice="system"><span class="theme-preview system-preview"></span><strong>跟随系统</strong><span>自动切换</span></button></div></div><div class="settings-tab" id="settings-data"><div class="setting-section-title"><h2>数据与隐私</h2><span>登录后自动多端同步数据。</span></div><div class="data-actions"><button class="data-action" data-action="cloud-login" id="cloud-settings-action"><i data-lucide="cloud"></i><span><strong>登录</strong><small>登录后多端同步数据</small></span><i data-lucide="chevron-right"></i></button><button class="data-action" data-action="export-data"><i data-lucide="download"></i><span><strong>导出全部数据</strong><small>下载一份 JSON 备份</small></span><i data-lucide="chevron-right"></i></button><button class="data-action" data-action="import-data"><i data-lucide="upload"></i><span><strong>导入数据备份</strong><small>从 JSON 恢复角色和会话</small></span><i data-lucide="chevron-right"></i></button><button class="data-action danger" data-action="reset-data"><i data-lucide="trash-2"></i><span><strong>清除本地数据</strong><small>不可撤销，请先导出备份</small></span><i data-lucide="chevron-right"></i></button></div></div></div></div></div>
+      </section>
+
+      <nav class="mobile-tabbar" aria-label="底部导航">
+        <button class="nav-item active" data-view="chat"><i data-lucide="message-circle"></i><span>聊天</span></button>
+        <button class="nav-item" data-view="roles"><i data-lucide="users-round"></i><span>角色</span></button>
+        <button class="nav-item" data-view="square"><i data-lucide="store"></i><span>广场</span></button>
+        <button class="nav-item" data-view="moments"><i data-lucide="sparkles"></i><span>朋友圈</span></button>
+        <button class="nav-item" data-view="world"><i data-lucide="orbit"></i><span>小世界</span></button>
+      </nav>
+    </main>
+  </div>
+
+  <div class="modal-backdrop hidden" id="role-modal"><div class="modal"><div class="modal-header"><div><span class="eyebrow">CHARACTER CARD</span><h2 id="role-modal-title">新建角色</h2></div><button class="icon-button" data-action="close-role-modal" title="关闭"><i data-lucide="x"></i></button></div><form id="role-form"><input type="hidden" id="role-id" /><div class="role-form-layout"><div class="avatar-upload"><div class="upload-preview" id="role-avatar-preview"><img src="./assets/character.png" alt="角色头像预览" /></div><button type="button" class="button quiet small" data-action="choose-avatar"><i data-lucide="image-plus"></i>更换头像</button><input type="file" id="avatar-input" accept="image/*" hidden /></div><div class="role-form-fields"><label class="form-label">角色名称<input class="form-input" id="role-name" required maxlength="40" placeholder="例如：林晚星" /></label><label class="form-label">一句话介绍<input class="form-input" id="role-subtitle" maxlength="80" placeholder="例如：会把晚风写进信里的女孩" /></label><label class="form-label">角色设定<textarea class="form-input form-textarea" id="role-description" rows="4" maxlength="1500" placeholder="写下她的性格、语气和与你的关系"></textarea></label><label class="form-label">开场白<textarea class="form-input form-textarea" id="role-greeting" rows="3" maxlength="500" placeholder="她第一次见到你时会说什么？"></textarea></label><label class="form-label">标签<input class="form-input" id="role-tags" maxlength="120" placeholder="治愈, 日常, 写信" /></label><details class="advanced-fields"><summary>角色高级设定</summary><label class="form-label">场景设定<input class="form-input" id="role-scenario" maxlength="1200" placeholder="当前故事发生的场景" /></label><label class="form-label">系统提示<textarea class="form-input form-textarea" id="role-system-prompt" rows="3" placeholder="额外系统指令"></textarea></label><label class="form-label">聊天预设<textarea class="form-input form-textarea" id="role-preset" rows="3" placeholder="每次请求都会附加的预设"></textarea></label><label class="form-label">示例对话<textarea class="form-input form-textarea" id="role-example-messages" rows="3" placeholder="示例对话格式"></textarea></label><label class="form-label">历史后置指令<textarea class="form-input form-textarea" id="role-post-history" rows="3" placeholder="历史消息之后附加的指令"></textarea></label><details class="rule-subdetails"><summary>世界书与正则规则</summary><label class="form-label">世界书 JSON 或文本<textarea class="form-input form-textarea code-input" id="role-world-book" rows="6" placeholder='{"entries":[{"keys":["关键词"],"content":"命中时注入的设定","enabled":true}]}'></textarea></label><label class="form-label">正则规则 JSON<textarea class="form-input form-textarea code-input" id="role-regex-rules" rows="5" placeholder='[{"find":"原文本","replace":"替换文本","flags":"g","scope":"output"}]'></textarea></label></details></details></div></div><div class="visual-rule-section"><div class="visual-rule-heading"><strong>可视化世界书条目</strong><button type="button" class="button small quiet" data-rule-action="add-world" data-rule-prefix="role"><i data-lucide="plus"></i>添加条目</button></div><p class="visual-rule-help">按关键词命中后注入设定；没有关键词的条目始终生效。</p><div class="visual-rule-list" id="role-world-book-visual"></div></div><div class="visual-rule-section"><div class="visual-rule-heading"><strong>可视化正则规则</strong><button type="button" class="button small quiet" data-rule-action="add-regex" data-rule-prefix="role"><i data-lucide="plus"></i>添加规则</button></div><p class="visual-rule-help">可选择应用在输入、输出或全部内容。</p><div class="visual-rule-list" id="role-regex-rules-visual"></div></div><div class="modal-footer"><button type="button" class="button quiet" data-action="close-role-modal">取消</button><button type="submit" class="button primary"><i data-lucide="save"></i>保存角色</button></div></form></div></div>
+  <div class="modal-backdrop hidden" id="role-profile-modal"><div class="modal role-profile-modal"><div class="modal-header"><div><h2 id="role-profile-title">角色信息</h2></div><button class="icon-button" data-action="close-role-profile" title="关闭"><i data-lucide="x"></i></button></div><div id="role-profile-content"></div></div></div>
+  <input type="file" id="role-import-input" accept=".json,.png,application/json,image/png" hidden />
+  <input type="file" id="chat-import-input" accept=".json,application/json" hidden />
+  <input type="file" id="data-import-input" accept=".json,application/json" hidden />
+  <input type="file" id="chat-image-input" accept="image/*" hidden /><input type="file" id="chat-audio-input" accept="audio/*" hidden />
+  <input type="file" id="moment-image-input" accept="image/*" hidden />
+  <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+  <div class="web-pet hidden" id="web-pet"><button class="web-pet-main" data-action="pet-interact" title="点击互动"><span id="web-pet-avatar"></span><i class="web-pet-notice hidden" id="web-pet-notice"></i></button><div class="web-pet-bubble hidden" id="web-pet-bubble"></div><div class="web-pet-actions"><button data-action="pet-open-chat" title="打开聊天"><i data-lucide="message-circle"></i></button><button data-action="pet-speak" title="朗读最后回复"><i data-lucide="volume-2"></i></button><button data-action="pet-hide" title="隐藏桌宠"><i data-lucide="x"></i></button></div></div>
+  <audio id="world-audio" preload="metadata"></audio>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="./app.js?v=1.4.15"></script>
+  <script>if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));</script>
+</body>
+</html>

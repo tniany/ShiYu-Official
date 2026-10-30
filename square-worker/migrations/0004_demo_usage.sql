@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS demo_daily_usage (
+  day TEXT PRIMARY KEY,
+  app_opens INTEGER NOT NULL DEFAULT 0,
+  apk_downloads INTEGER NOT NULL DEFAULT 0,
+  web_visits INTEGER NOT NULL DEFAULT 0,
+  web_logins INTEGER NOT NULL DEFAULT 0,
+  note TEXT NOT NULL DEFAULT '模拟补录'
+);
