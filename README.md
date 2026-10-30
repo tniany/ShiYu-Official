@@ -5,6 +5,8 @@
 
 时遇是一款面向 Android、Web 和 Windows 的角色扮演智能体聊天应用。你可以连接 OpenAI Chat Completions 兼容接口，导入角色卡，与角色聊天、分享动态，并使用语音、桌宠、音乐和扩展工具等功能。
 
+![时遇产品展示](build/shiyu-official-095/assets/hero-dfddcde54819456783eea1c62289486a.png)
+
 当前 Android 版本为 **0.9.5**，Windows 版本为 **0.2.7**。
 
 ## 产品入口
