@@ -1,7 +1,10 @@
 # 时遇
 
-[![访问量](https://img.shields.io/endpoint?url=https%3A%2F%2Fshiy.tniay.top%2Fapi%2Fvisits%3Fformat%3Dshields)](https://shiy.tniay.top/)
-[![今日访问](https://img.shields.io/endpoint?url=https%3A%2F%2Fshiy.tniay.top%2Fapi%2Fvisits%3Fformat%3Dshields%26metric%3Dtoday)](https://shiy.tniay.top/)
+<p align="center">
+  <a href="https://github.com/journey-ad/Moe-counter">
+    <img alt="页面访问量" src="https://count.getloli.com/@tniany-shiyu?name=tniany-shiyu&theme=moebooru&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto">
+  </a>
+</p>
 
 时遇是一款面向 Android、Web 和 Windows 的角色扮演智能体聊天应用。你可以连接 OpenAI Chat Completions 兼容接口，导入角色卡，与角色聊天、分享动态，并使用语音、桌宠、音乐和扩展工具等功能。
 
@@ -91,7 +94,3 @@ node --test square-worker/test/windows-download.test.mjs
 - 官网内容位于 `build/shiyu-official-095/`
 
 提交代码前请确认相关平台可以正常构建，并运行对应测试。
-
-## 使用组件
-
-- [萌萌计数器](https://github.com/journey-ad/Moe-counter)：用于网站访问计数展示。
