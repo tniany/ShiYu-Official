@@ -91,3 +91,7 @@ node --test square-worker/test/windows-download.test.mjs
 - 官网内容位于 `build/shiyu-official-095/`
 
 提交代码前请确认相关平台可以正常构建，并运行对应测试。
+
+## 致谢
+
+- [萌萌计数器](https://github.com/journey-ad/Moe-counter)
