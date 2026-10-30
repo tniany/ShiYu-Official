@@ -13,7 +13,16 @@
 | `web/` | Web 应用，由 `square-worker/`（Cloudflare Worker）在 `web-shiy.tniay.top` 提供 |
 | `desktop/` | Windows 电脑版 Electron 客户端构建方案 |
 | `build/shiyu-official-*` | 官网 `shiy.tniay.top` 的部署源（Cloudflare Pages 项目 `shiyu-official`） |
-| `release/` | 历史 APK 与发布说明（0.9.0 – 0.9.5） |
+| `release/` | 版本说明、验证记录与历史发布资料（0.9.0 – 0.9.5） |
+
+各目录的职责如下：
+
+- `app/`：Android 原生客户端、后台服务、原生工具与本地推理能力。
+- `web/`：Web 版应用源码，包含角色、聊天、朋友圈、备份、云同步与下载页面。
+- `square-worker/`：`web-shiy.tniay.top` 的 Cloudflare Worker、API、D1 迁移与网络下载处理。
+- `desktop/`：Windows 10 / 11 64 位 Electron 客户端，当前版本 `0.2.7`。
+- `build/shiyu-official-095/`：当前官网 `shiy.tniay.top` 的 Cloudflare Pages 部署源。
+- `release/`：版本说明、验证记录和历史发布资料；APK、安装包及分片等二进制产物不纳入主仓库。
 
 ## 当前功能
 
@@ -68,17 +77,75 @@ Windows 10 / 11 64 位安装包和桌面端构建方案见 [desktop/README.md](d
 - 应用内更新检查读取线上 `version.json`，并展示历史更新日志。
 - 公共站点的改动只能通过 `shiyu-official` Pages 项目发布，不要从 `web/` 发布官网或发布页内容。
 
-## 构建
+## 本地运行与构建
 
-需要 JDK 17、Android SDK（compileSdk 36）和 Gradle 8.7 或兼容版本，项目使用 Android Gradle Plugin 8.6.1 与 Kotlin 1.9.24：
+### Android
+
+需要 JDK 17、Android SDK（compileSdk 36）和 Gradle 8.7 或兼容版本。项目使用 Android Gradle Plugin 8.6.1 与 Kotlin 1.9.24：
 
 ```powershell
 .\gradlew.bat assembleDebug
 ```
 
-调试 APK 输出到 `app/build/outputs/apk/debug/app-debug.apk`。
+调试 APK 输出到 `app/build/outputs/apk/debug/app-debug.apk`。由于仓库路径包含中文，`gradle.properties` 已启用 Android Gradle Plugin 的路径检查覆盖选项。
 
-由于仓库路径包含中文，项目已在 `gradle.properties` 中启用 Android Gradle Plugin 的路径检查覆盖选项。
+### Web
+
+Web 版为无需构建的静态应用，可在 `web/` 目录启动本地服务器：
+
+```powershell
+cd web
+.\start.ps1
+```
+
+默认地址为 `http://localhost:4173/`，端口被占用时可使用 `.\start.ps1 -Port 4174`。
+
+### Cloudflare Worker
+
+`square-worker/` 使用 Wrangler 运行和部署，提供 Web 静态资源、账号与广场 API、D1 数据库迁移和下载传输能力：
+
+```powershell
+cd square-worker
+npx wrangler dev
+npx wrangler deploy
+```
+
+本地登录状态、`.wrangler` 缓存和 `.auth-config` 不应提交到仓库。
+
+### Windows 桌面端
+
+需要 Node.js 22 或更新版本：
+
+```powershell
+cd desktop
+npm ci
+npm test
+npm start
+npm run dist
+```
+
+安装包输出到 `release/windows/`，不会修改 Web 源码或 Cloudflare 路由。
+
+### 官网
+
+官网部署源位于 `build/shiyu-official-095/`。预览或发布时必须使用 Cloudflare Pages 项目 `shiyu-official`：
+
+```powershell
+cd build/shiyu-official-095
+npx wrangler pages dev .
+npx wrangler pages deploy . --project-name shiyu-official
+```
+
+不要将 `shiy.tniay.top` 路由到 `shiyu-character-square`，也不要从 `web/` 部署官网或 Release 页面。
+
+### 测试
+
+```powershell
+npm test --prefix desktop
+node --test square-worker/test/windows-download.test.mjs
+```
+
+Android 代码可在仓库根目录运行 `gradlew.bat test`；发布前还应完成对应平台的安装、升级和回滚验证。
 
 ## 隐私
 
