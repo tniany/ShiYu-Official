@@ -2648,6 +2648,7 @@ public class MainActivity extends androidx.activity.ComponentActivity {
                 mainActivity.recordApiError(error);
             }
             chat2.updated = java.lang.System.currentTimeMillis();
+            if (error == null) ChatReplyOrdering.removeEmptyPlaceholder(chat2.messages, placeholder);
             save();
             mainActivity.refreshChatUi(chat2);
             if (remaining.decrementAndGet() == 0) {
@@ -2819,6 +2820,21 @@ public class MainActivity extends androidx.activity.ComponentActivity {
                 if (!generationToken.equals(mainActivity.generationTokens.get(x.id)))
                     throw new java.io.InterruptedIOException("stopped");
                 com.tniany.shiyu.MainActivity.RoleActionCommand roundActions = mainActivity.parseRoleActionCommands(generated.text);
+                boolean mcpEnabled = mainActivity.roleMcpEnabled(x);
+                if (!mcpEnabled && !roundActions.mcpCalls.isEmpty()) {
+                    toolRounds++;
+                    com.tniany.shiyu.MainActivity.Msg rejectedToolReply = new com.tniany.shiyu.MainActivity.Msg("assistant", generated.text);
+                    rejectedToolReply.speakerCardId = c.id;
+                    toolContext.add(rejectedToolReply);
+                    toolContext.add(new com.tniany.shiyu.MainActivity.Msg("system", "当前对话已关闭角色工具与 MCP 调用。不要输出 [调用工具：...]，不要假装调用或声称使用过任何工具；请只依据已有对话，以角色身份正常回复。"));
+                    generated = mainActivity.completeStream(x, toolContext, c, new java.util.function.BiConsumer() { // from class: com.tniany.shiyu.MainActivity$$ExternalSyntheticLambda89
+                        @Override // java.util.function.BiConsumer
+                        public final void accept(java.lang.Object obj, java.lang.Object obj2) {
+                            MainActivity.this.lambda$request$55(generationToken, x, reply, (java.lang.String) obj, (java.lang.String) obj2);
+                        }
+                    });
+                    continue;
+                }
                 if (roundActions.mcpCalls.isEmpty() && !roundActions.weatherRequested && roundActions.webSearchQueries.isEmpty()
                         && roundActions.mapOpens.isEmpty() && roundActions.quickApps.isEmpty() && roundActions.linkReads.isEmpty()) {
                     break;
@@ -4502,6 +4518,7 @@ public class MainActivity extends androidx.activity.ComponentActivity {
             system3 = system3 + "\n这是沉浸式私聊。你已经完整看过用户连续发送的全部消息，请自行决定回复的自然消息条数" + (chat2.segmentedRepliesEnabled ? "（最多 " + java.lang.Math.max(2, chat2.segmentedReplyMaxParts) + " 条）" : "") + "；需要连续发送多条时仅用 <SEG> 分隔，每条都要像真实聊天且不要重复。" + (chat2.privateReplyDecision ? "如果此刻确实不想回复，只能输出 [NO_REPLY]。" : "必须自然回复。 ");
         }
         java.lang.String system4 = (chat2.group && chat2.groupActiveTopics) ? system3 + "\n群聊冷场或没有明确问题时，你可以根据自己的人格自然开启一个新话题，但不得替其他成员发言。" : system3;
+        if (!roleMcpEnabled(chat2)) system4 += "\n本轮未开启远程 MCP 工具。不要输出 [调用工具：...] 标记，也不要声称调用或使用过任何外部工具。";
         java.lang.String userProfile2 = "system";
         arr.put(new org.json.JSONObject().put("role", "system").put("content", system4));
         java.lang.String preset3 = preset;

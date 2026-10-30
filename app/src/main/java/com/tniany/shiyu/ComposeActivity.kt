@@ -934,7 +934,6 @@ class ComposeActivity : MainActivity() {
     copyText("QQ 群链接",url)
     return false
   }
-  private fun openFeedbackWebsite(){openWebLink(BuildConfig.FEEDBACK_PAGE_URL,"无法打开官网反馈页")}
   private fun feedbackDiagnostics():String{
     val root=JSONObject().put("appVersion",BuildConfig.VERSION_NAME).put("versionCode",BuildConfig.VERSION_CODE)
       .put("androidSdk",android.os.Build.VERSION.SDK_INT).put("androidRelease",android.os.Build.VERSION.RELEASE)
@@ -1148,7 +1147,7 @@ class ComposeActivity : MainActivity() {
         val statusOverlay=(activeChat?.backgroundOverlay?.takeIf{it>=0}?:safePrefInt("chat_background_overlay",20)).coerceIn(0,70)/100f
         val darkStatusIcons=remember(transparentChatStatus,statusBackground,statusImage,statusOverlay,dark){if(transparentChatStatus)chatStatusBarDarkIcons(statusBackground,statusImage,statusOverlay)else !dark}
         val togetherBars=composePage==Page.TOGETHER_LISTEN
-        SyncSystemBars(dark,transparentChatStatus||togetherBars,composePage==Page.CHAT||togetherBars,if(togetherBars)false else darkStatusIcons,null)
+        SyncSystemBars(dark,transparentChatStatus||togetherBars,true,if(togetherBars)false else darkStatusIcons,null)
         ShiYuApp(themeMode,{ value -> themeMode = value },themeStyle) { value -> themeStyle = value }
       }
     }
@@ -1295,6 +1294,7 @@ class ComposeActivity : MainActivity() {
       WindowCompat.setDecorFitsSystemWindows(window,false)
       window.statusBarColor = if(transparentStatus)AndroidColor.TRANSPARENT else resolvedBarColor.toArgb()
       window.navigationBarColor = if(transparentNavigation)AndroidColor.TRANSPARENT else resolvedBarColor.toArgb()
+      if(android.os.Build.VERSION.SDK_INT>=28)window.navigationBarDividerColor=AndroidColor.TRANSPARENT
       if(android.os.Build.VERSION.SDK_INT>=29)window.isNavigationBarContrastEnforced=!transparentNavigation
       WindowCompat.getInsetsController(window, view).apply {
         isAppearanceLightStatusBars = darkStatusIcons
@@ -1657,7 +1657,6 @@ class ComposeActivity : MainActivity() {
       if(result.isNotBlank())item{InfoBanner(Icons.Outlined.CheckCircle,"反馈已提交","参考编号：$result。感谢你帮助时遇变得更好。")}
       item{Button(onClick={if(content.trim().length<10)toast("反馈内容至少需要 10 个字")else{submitting=true;result="";submitFeedback(category,content.trim(),contact.trim(),includeLogs){ok,message->submitting=false;if(ok){result=message;content="";contact="";includeLogs=true}else toast("提交失败：$message")}}},enabled=!submitting,modifier=Modifier.fillMaxWidth().height(50.dp)){if(submitting)CircularProgressIndicator(Modifier.size(19.dp),strokeWidth=2.dp)else Icon(Icons.Outlined.Send,null);Spacer(Modifier.width(8.dp));Text(if(submitting)"正在安全提交" else "提交反馈",maxLines=1,softWrap=false)}}
       item{SectionTitle("其他方式")}
-      item{SettingButton(Icons.Outlined.Language,"在官网反馈页打开","使用同一安全接口，页面不在官网公开导航中"){openFeedbackWebsite()}}
       item{SettingButton(Icons.Outlined.Groups,"加入时遇 QQ 群","1061590432 · 点击用浏览器打开"){openQqGroup()}}
       item{Text("请勿在反馈中填写 API Key、密码、身份证件、支付信息、完整聊天记录或其他敏感内容。",fontSize=11.sp,lineHeight=17.sp,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(10.dp))}
     }
@@ -4635,7 +4634,7 @@ ${history.joinToString("\n"){"${if(it.role=="user")"用户" else "角色"}：${i
       if(immersive&&wasSending)restartImmersiveGeneration(chat)
       val messageBody=body.trim()
       val members=if(chat.group)chat.cardIds.mapNotNull{find(it)}else emptyList()
-      val mentioned=members.filter{member->messageBody.contains("@${member.name}")}
+      val mentioned=ChatReplyOrdering.mentioned(messageBody,members)
       val target=mentioned.firstOrNull()?:if(chat.group&&chat.groupAutonomous)members.randomOrNull()?:card else card
       if(mentioned.isNotEmpty()||chat.group){chat.activeCardId=target.id;chat.cardId=target.id}
       val message=Msg("user",messageBody);message.messageType=type;message.meta=meta;message.image=image;message.file=file;message.delivered=!chat.userBlockedRole

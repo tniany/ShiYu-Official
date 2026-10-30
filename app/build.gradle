@@ -42,8 +42,7 @@ android {
         buildConfigField 'String', 'OPEN_EVENT_URL', '"https://shiy.tniay.top/api/open"'
         buildConfigField 'String', 'UPDATE_MANIFEST_URL', '"https://shiy.tniay.top/version.json"'
         buildConfigField 'String', 'ANNOUNCEMENT_URL', '"https://web-shiy.tniay.top/api/announcements"'
-        buildConfigField 'String', 'FEEDBACK_API_URL', '"https://shiy.tniay.top/api/feedback"'
-        buildConfigField 'String', 'FEEDBACK_PAGE_URL', '"https://shiy.tniay.top/internal/feedback-4d27c9"'
+        buildConfigField 'String', 'FEEDBACK_API_URL', '"https://web-shiy.tniay.top/api/feedback"'
     }
     composeOptions { kotlinCompilerExtensionVersion '1.5.14' }
 

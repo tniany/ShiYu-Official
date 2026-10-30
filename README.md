@@ -83,6 +83,7 @@ npm start
 ```powershell
 npm test --prefix desktop
 node --test square-worker/test/windows-download.test.mjs
+node --test square-worker/test/usage-open.test.mjs
 ```
 
 ## 参与开发

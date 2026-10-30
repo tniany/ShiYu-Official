@@ -18,6 +18,7 @@
 ```powershell
 node desktop/scripts/prepare-site-release.cjs
 node --test square-worker/test/windows-download.test.mjs
+node --test square-worker/test/usage-open.test.mjs
 node desktop/scripts/test-download-page.cjs
 npx wrangler deploy --config square-worker/wrangler.toml --dry-run
 ```
@@ -32,6 +33,8 @@ npx wrangler --cwd build/shiyu-official-windows-026 pages deploy . --project-nam
 ```
 
 发布后检查两个下载页、首页下载入口、Android 清单、安装包完整下载 SHA-256、跨分片 Range 请求、`latest.yml`、`.blockmap` 和 GitHub 备用附件。不要把 `shiy.tniay.top` 绑定到 `shiyu-character-square`。
+
+官网发布后还必须检查 `GET https://shiy.tniay.top/api/open` 返回 JSON 健康信息，`OPTIONS /api/open` 返回 204，并用 App 格式提交一次启动事件确认计数成功。测试事件必须从 D1 精确回滚。
 
 安装包大小：114,524,161 字节（约 109.2 MiB）。
 
