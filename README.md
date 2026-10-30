@@ -92,6 +92,6 @@ node --test square-worker/test/windows-download.test.mjs
 
 提交代码前请确认相关平台可以正常构建，并运行对应测试。
 
-## 致谢
+## 使用组件
 
-- [萌萌计数器](https://github.com/journey-ad/Moe-counter)
+- [萌萌计数器](https://github.com/journey-ad/Moe-counter)：用于网站访问计数展示。
