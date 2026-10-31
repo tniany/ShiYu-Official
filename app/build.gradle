@@ -41,6 +41,8 @@ android {
     defaultConfig {
         buildConfigField 'String', 'OPEN_EVENT_URL', '"https://shiy.tniay.top/api/open"'
         buildConfigField 'String', 'UPDATE_MANIFEST_URL', '"https://shiy.tniay.top/version.json"'
+        buildConfigField 'String', 'MARKET_CATALOG_URL', '"https://shiy.tniay.top/market/catalog.json"'
+        buildConfigField 'String', 'MARKET_DEVELOPER_URL', '"https://web-shiy.tniay.top/market/submit"'
         buildConfigField 'String', 'ANNOUNCEMENT_URL', '"https://web-shiy.tniay.top/api/announcements"'
         buildConfigField 'String', 'FEEDBACK_API_URL', '"https://web-shiy.tniay.top/api/feedback"'
     }

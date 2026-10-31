@@ -1,0 +1,603 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://web-shiy.tniay.top/market/schema/theme.shiyu.schema.json",
+  "title": "时遇主题 shiyu.json",
+  "description": "主题只能修改 App 已审核的外观字段，不能包含脚本、CSS、远程代码或任意宿主能力。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "kind",
+    "id",
+    "version",
+    "name",
+    "summary",
+    "description",
+    "author",
+    "tags",
+    "palette",
+    "values"
+  ],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "kind": {
+      "const": "theme"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^community\\.[a-z][a-z0-9-]{2,47}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[a-z0-9.-]{1,32})?$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 60
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 300
+    },
+    "description": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 2000
+    },
+    "author": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 80
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 16
+      }
+    },
+    "palette": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 6,
+      "items": {
+        "type": "string",
+        "pattern": "^#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"
+      }
+    },
+    "values": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "compose_theme": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "compose_theme_style": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "refresh_rate": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 165
+        },
+        "chat_font_size": {
+          "type": "integer",
+          "minimum": 12,
+          "maximum": 20
+        },
+        "chat_bubble_spacing": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 16
+        },
+        "chat_line_height": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 32
+        },
+        "chat_user_bubble_opacity": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 100
+        },
+        "chat_ai_bubble_opacity": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 100
+        },
+        "chat_bubble_max_width": {
+          "type": "integer",
+          "minimum": 240,
+          "maximum": 360
+        },
+        "chat_bubble_vertical_padding": {
+          "type": "integer",
+          "minimum": 6,
+          "maximum": 20
+        },
+        "chat_input_min_height": {
+          "type": "integer",
+          "minimum": 40,
+          "maximum": 64
+        },
+        "chat_background_overlay": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 70
+        },
+        "experimental_glass_opacity": {
+          "type": "integer",
+          "minimum": 20,
+          "maximum": 100
+        },
+        "chat_background_color": {
+          "type": "string",
+          "pattern": "^(?:|#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8}))$"
+        },
+        "chat_user_bubble_color": {
+          "type": "string",
+          "pattern": "^(?:|#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8}))$"
+        },
+        "chat_ai_bubble_color": {
+          "type": "string",
+          "pattern": "^(?:|#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8}))$"
+        },
+        "chat_no_bubbles": {
+          "type": "boolean"
+        },
+        "chat_hide_avatars": {
+          "type": "boolean"
+        },
+        "chat_half_screen": {
+          "type": "boolean"
+        },
+        "experimental_input_glass": {
+          "type": "boolean"
+        },
+        "experimental_top_bar_transparent": {
+          "type": "boolean"
+        },
+        "experimental_glass_ui": {
+          "type": "boolean"
+        }
+      }
+    },
+    "settings": {
+      "description": "声明式设置，最多 12 项。key 和 target 必须唯一，default 必须与 values 中对应字段的基线值一致。",
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/switchSetting"
+          },
+          {
+            "$ref": "#/$defs/rangeSetting"
+          },
+          {
+            "$ref": "#/$defs/selectSetting"
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "switchSetting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "type",
+        "label",
+        "target",
+        "default"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,31}$"
+        },
+        "type": {
+          "const": "switch"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 180
+        },
+        "target": {
+          "enum": [
+            "chat_no_bubbles",
+            "chat_hide_avatars",
+            "chat_half_screen",
+            "experimental_input_glass",
+            "experimental_top_bar_transparent",
+            "experimental_glass_ui"
+          ]
+        },
+        "default": {
+          "type": "boolean"
+        }
+      }
+    },
+    "rangeSetting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "type",
+        "label",
+        "target",
+        "min",
+        "max",
+        "step",
+        "default"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,31}$"
+        },
+        "type": {
+          "const": "range"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 180
+        },
+        "target": {
+          "enum": [
+            "compose_theme",
+            "compose_theme_style",
+            "refresh_rate",
+            "chat_font_size",
+            "chat_bubble_spacing",
+            "chat_line_height",
+            "chat_user_bubble_opacity",
+            "chat_ai_bubble_opacity",
+            "chat_bubble_max_width",
+            "chat_bubble_vertical_padding",
+            "chat_input_min_height",
+            "chat_background_overlay",
+            "experimental_glass_opacity"
+          ]
+        },
+        "min": {
+          "type": "integer"
+        },
+        "max": {
+          "type": "integer"
+        },
+        "step": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "default": {
+          "type": "integer"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "target": {
+                "const": "compose_theme"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "minimum": 0
+              },
+              "max": {
+                "maximum": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target": {
+                "const": "compose_theme_style"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "minimum": 0
+              },
+              "max": {
+                "maximum": 4
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target": {
+                "const": "refresh_rate"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "minimum": 0
+              },
+              "max": {
+                "maximum": 165
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target": {
+                "const": "chat_font_size"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "minimum": 12
+              },
+              "max": {
+                "maximum": 20
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target": {
+                "const": "chat_bubble_spacing"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "minimum": 2
+              },
+              "max": {
+                "maximum": 16
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target": {
+                "const": "chat_line_height"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "minimum": 16
+              },
+              "max": {
+                "maximum": 32
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target": {
+                "enum": [
+                  "chat_user_bubble_opacity",
+                  "chat_ai_bubble_opacity"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "minimum": 10
+              },
+              "max": {
+                "maximum": 100
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target": {
+                "const": "chat_bubble_max_width"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "minimum": 240
+              },
+              "max": {
+                "maximum": 360
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target": {
+                "const": "chat_bubble_vertical_padding"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "minimum": 6
+              },
+              "max": {
+                "maximum": 20
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target": {
+                "const": "chat_input_min_height"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "minimum": 40
+              },
+              "max": {
+                "maximum": 64
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target": {
+                "const": "chat_background_overlay"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "minimum": 0
+              },
+              "max": {
+                "maximum": 70
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "target": {
+                "const": "experimental_glass_opacity"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "minimum": 20
+              },
+              "max": {
+                "maximum": 100
+              }
+            }
+          }
+        }
+      ]
+    },
+    "selectSetting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "type",
+        "label",
+        "target",
+        "default",
+        "options"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,31}$"
+        },
+        "type": {
+          "const": "select"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 180
+        },
+        "target": {
+          "enum": [
+            "chat_background_color",
+            "chat_user_bubble_color",
+            "chat_ai_bubble_color"
+          ]
+        },
+        "default": {
+          "type": "string",
+          "pattern": "^#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"
+        },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "value",
+              "label"
+            ],
+            "properties": {
+              "value": {
+                "type": "string",
+                "pattern": "^#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 24
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

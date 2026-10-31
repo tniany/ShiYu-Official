@@ -1,3 +1,6 @@
+import { inspectGitHubRepository, mergePublicCatalog, reviewTransition, validateMarketplaceManifest } from './marketplace.mjs';
+import { developerMarketPage, marketplaceDocsPage } from './marketplace-pages.mjs';
+import { withMarketplaceSettingsDocs } from './marketplace-settings-docs.mjs';
 import { WINDOWS_RELEASE, streamWindows } from "./windows-download";
 
 type D1Database = any;
@@ -11,6 +14,7 @@ interface Env {
   AUTH_SERVICE?: { fetch(request: Request): Promise<Response> };
   ADMIN_ROUTE: string;
   ADMIN_SECRET: string;
+  GITHUB_TOKEN?: string;
   APP_ORIGIN?: string;
 }
 
@@ -176,7 +180,7 @@ td .ops{display:flex;gap:6px;flex-wrap:wrap}
 <div class="card gate" id="gate-login" style="display:none"><h2 style="margin:0 0 8px">请先登录</h2><p class="muted">管理后台需要时遇账号登录与管理密钥。</p><button class="primary" onclick="location.href='/auth/login?return_to=%2Fshiyadmin'">使用时遇账号登录</button></div>
 <div class="card gate" id="gate-key" style="display:none"><h2 style="margin:0 0 8px">输入管理密钥</h2><p class="muted">需要账号登录 + 管理密钥双重校验，密钥只保存在本机浏览器。</p><input id="key" type="password" placeholder="管理密钥" autocomplete="off"><div id="keymsg"></div><button class="primary" id="keybtn">进入后台</button></div>
 <div id="app" style="display:none">
-  <div class="tabs"><button data-tab="stats" class="on">数据统计</button><button data-tab="app-usage">App 使用统计</button><button data-tab="feedback">用户反馈</button><button data-tab="cards">角色卡</button><button data-tab="users">用户数据</button><button data-tab="comments">评论</button><button data-tab="ann">公告管理</button></div>
+  <div class="tabs"><button data-tab="stats" class="on">数据统计</button><button data-tab="app-usage">App 使用统计</button><button data-tab="feedback">用户反馈</button><button data-tab="cards">角色卡</button><button data-tab="users">用户数据</button><button data-tab="comments">评论</button><button data-tab="ann">公告管理</button><button data-tab="market">市场审核</button></div>
   <div id="content"></div>
 </div>
 </main>
@@ -194,7 +198,7 @@ function show(which){$('#gate-login').style.display=which==='login'?'':'none';$(
 function init(){fetch('/auth/me').then(function(r){return r.json()}).then(function(d){if(!d.loggedIn){show('login');return}$('#who').innerHTML=esc(d.user.name)+' · '+(d.user.qqId||'')+' · <button class="small" onclick="logout()">退出登录</button>';if(KEY)tryKey();else show('key')})}
 function logout(){fetch('/auth/logout',{method:'POST'}).then(function(){location.reload()})}
 function tryKey(){KEY=$('#key')?$('#key').value.trim()||KEY:KEY;api('/api/shiyadmin/session').then(function(d){KEY=($('#key')&&$('#key').value.trim())||KEY;localStorage.setItem('shiyadmin_key',KEY);show('app');render()}).catch(function(e){show('key');$('#keymsg').innerHTML='<div class="err">'+esc(e.message)+'</div>'})}
-function render(){document.querySelectorAll('.tabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===TAB)});var c=$('#content');c.innerHTML='<div class="card muted">加载中…</div>';if(TAB==='stats')renderStats();else if(TAB==='app-usage')renderAppUsage();else if(TAB==='feedback')renderFeedback();else if(TAB==='cards')renderCards();else if(TAB==='users')renderUsers();else if(TAB==='comments')renderComments();else renderAnn()}
+function render(){document.querySelectorAll('.tabs button').forEach(function(b){b.classList.toggle('on',b.dataset.tab===TAB)});var c=$('#content');c.innerHTML='<div class="card muted">加载中…</div>';if(TAB==='stats')renderStats();else if(TAB==='app-usage')renderAppUsage();else if(TAB==='feedback')renderFeedback();else if(TAB==='cards')renderCards();else if(TAB==='users')renderUsers();else if(TAB==='comments')renderComments();else if(TAB==='market')renderMarketReviews();else renderAnn()}
 function fail(c,e){c.innerHTML='<div class="card"><div class="err">'+esc(e.message)+'</div><button onclick="render()">重试</button></div>'}
 function renderStats(){var c=$('#content');api('/api/shiyadmin/stats').then(function(d){var days=[];var map={};(d.cards.trend||[]).forEach(function(t){map[t.d]=t.n});for(var i=13;i>=0;i--){var dt=new Date(Date.now()-i*86400000);var key=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');days.push({d:key,n:map[key]||0})}var max=1;days.forEach(function(x){if(x.n>max)max=x.n});var bars='';days.forEach(function(x){bars+='<div class="bar" title="'+x.d+'：'+x.n+' 张"><i style="height:'+Math.round(x.n/max*88+4)+'px"></i><span>'+(x.n||'')+'</span><span class="muted">'+x.d.slice(5)+'</span></div>'});var syncs=(d.recentSyncs||[]).map(function(s){return '<tr><td class="muted">'+esc(s.user_id)+'</td><td>'+fmtTime(s.updated_at)+'</td><td>'+fmtBytes(s.bytes)+'</td></tr>'}).join('');var cards=(d.recentCards||[]).map(function(s){return '<tr><td>'+esc(s.title)+'</td><td>'+esc(s.owner_name)+'</td><td><span class="tag '+s.status+'">'+s.status+'</span></td><td class="muted">'+fmtTime(s.created_at)+'</td></tr>'}).join('');c.innerHTML='<div class="stats"><div class="stat"><span>云同步用户</span><b>'+d.users.count+'</b></div><div class="stat"><span>云端存储总量</span><b>'+fmtBytes(d.users.bytes)+'</b></div><div class="stat"><span>角色卡总数</span><b>'+d.cards.total+'</b><span>待审 '+d.cards.pending+' · 通过 '+d.cards.approved+' · 拒绝 '+d.cards.rejected+' · 隐藏 '+d.cards.hidden+'</span></div><div class="stat"><span>评论总数</span><b>'+d.comments+'</b></div><div class="stat"><span>公告数量</span><b>'+d.announcements+'</b></div></div><div class="card"><b>近 14 天角色卡发布趋势</b><div class="bars">'+bars+'</div></div><div class="card"><b>最近同步的用户</b><table><thead><tr><th>用户</th><th>最近同步</th><th>占用</th></tr></thead><tbody>'+(syncs||'<tr><td colspan="3" class="muted">暂无数据</td></tr>')+'</tbody></table></div><div class="card"><b>最新角色卡</b><table><thead><tr><th>标题</th><th>作者</th><th>状态</th><th>提交时间</th></tr></thead><tbody>'+(cards||'<tr><td colspan="4" class="muted">暂无数据</td></tr>')+'</tbody></table></div>'}).catch(function(e){fail(c,e)})}
 function renderAppUsage(){var c=$('#content');api('/api/shiyadmin/app-usage').then(function(d){var metric=function(label,value){return '<div class="stat"><span>'+label+'</span><b>'+Number(value||0).toLocaleString()+'</b></div>'};var dayRows=(d.daily||[]).map(function(x){return '<tr><td>'+esc(x.day)+'</td><td>'+Number(x.app_opens||0).toLocaleString()+'</td><td>'+Number(x.apk_downloads||0).toLocaleString()+'</td><td>'+Number(x.web_visits||0).toLocaleString()+'</td><td>'+Number(x.web_logins||0).toLocaleString()+'</td></tr>'}).join('');var demoRows=(d.demoDaily||[]).map(function(x){return '<tr><td>'+esc(x.day)+'</td><td>'+Number(x.app_opens||0).toLocaleString()+'</td><td>'+Number(x.apk_downloads||0).toLocaleString()+'</td><td>'+Number(x.web_visits||0).toLocaleString()+'</td><td>'+Number(x.web_logins||0).toLocaleString()+'</td><td>'+esc(x.note||'模拟补录')+'</td></tr>'}).join('');var versionRows=(d.versions||[]).map(function(x){return '<tr><td>'+esc(x.version)+'</td><td>'+Number(x.app_opens||0).toLocaleString()+'</td><td>'+Number(x.apk_downloads||0).toLocaleString()+'</td></tr>'}).join('');c.innerHTML='<div class="stats">'+metric('App 累计启动',d.totals.app_opens)+metric('APK 累计下载',d.totals.apk_downloads)+metric('网页访问',d.totals.web_visits)+metric('网页登录',d.totals.web_logins)+metric('去重登录用户',d.totals.login_people)+'</div><div class="card"><b>完整历史</b><div style="overflow:auto"><table><thead><tr><th>日期</th><th>App 启动</th><th>APK 下载</th><th>网页访问</th><th>网页登录</th></tr></thead><tbody>'+(dayRows||'<tr><td colspan="5" class="muted">暂无数据</td></tr>')+'</tbody></table></div></div><div class="card"><b>模拟补录（不计入真实累计）</b><p class="muted" style="margin:8px 0">以下数据仅用于填补历史展示，不代表真实访问、启动或下载记录。</p><div style="overflow:auto"><table><thead><tr><th>日期</th><th>App 启动</th><th>APK 下载</th><th>网页访问</th><th>网页登录</th><th>标记</th></tr></thead><tbody>'+(demoRows||'<tr><td colspan="6" class="muted">暂无模拟数据</td></tr>')+'</tbody></table></div></div><div class="card"><b>完整版本统计</b><div style="overflow:auto"><table><thead><tr><th>版本</th><th>App 启动</th><th>APK 下载</th></tr></thead><tbody>'+(versionRows||'<tr><td colspan="3" class="muted">暂无数据</td></tr>')+'</tbody></table></div></div>'}).catch(function(e){fail(c,e)})}
@@ -206,6 +210,8 @@ function renderUsersRefresh(d){var rows=(d.users||[]).map(function(x){return '<t
 function renderComments(){var c=$('#content');api('/api/shiyadmin/comments').then(function(d){var rows=(d.comments||[]).map(function(x){return '<tr><td>'+esc(x.card_title)+'<div class="muted" style="font-size:11px">'+esc(x.user_name)+' · '+fmtTime(x.created_at)+'</div></td><td>'+esc((x.content||'').slice(0,120))+'</td><td><button class="small danger" data-act="delcomment" data-id="'+x.id+'">删除</button></td></tr>'}).join('');c.innerHTML='<div class="card"><b>最近评论（最多 100 条）</b><table><thead><tr><th>角色卡 / 用户</th><th>内容</th><th>操作</th></tr></thead><tbody>'+(rows||'<tr><td colspan="3" class="muted">暂无评论</td></tr>')+'</tbody></table></div>'}).catch(function(e){fail(c,e)})}
 var annDraft=null;
 function renderAnn(){var c=$('#content');api('/api/shiyadmin/announcements').then(function(d){var rows=(d.announcements||[]).map(function(x){return '<tr><td><b>'+esc(x.title)+'</b>'+(x.pinned?' <span class="tag approved">置顶</span>':'')+(x.type==='always'?' <span class="tag pending">每次显示</span>':' <span class="tag hidden">一次性</span>')+'<div class="muted" style="font-size:12px;white-space:pre-wrap">'+esc((x.content||'').slice(0,160))+'</div><div class="muted" style="font-size:11px">更新于 '+fmtTime(x.updated_at)+'</div></td><td><div class="ops"><button class="small" data-act="editann" data-id="'+x.id+'">编辑</button><button class="small" data-act="pinann" data-id="'+x.id+'">'+(x.pinned?'取消置顶':'置顶')+'</button><button class="small danger" data-act="delann" data-id="'+x.id+'">删除</button></div></td></tr>'}).join('');c.innerHTML='<div class="card"><b>'+(editingAnn?'编辑公告':'发布新公告')+'</b><div class="form" style="margin-top:10px"><label>标题<input id="ann-title" maxlength="120" placeholder="公告标题" value="'+esc(annDraft?annDraft.title:'')+'"></label><label>内容<textarea id="ann-content" rows="5" maxlength="5000" placeholder="公告正文，会展示在网页版顶部">'+esc(annDraft?annDraft.content:'')+'</textarea></label><label>显示类型<select id="ann-type"><option value="once"'+(annDraft&&annDraft.type==='always'?'':' selected')+'>一次性（用户关闭后不再显示）</option><option value="always"'+(annDraft&&annDraft.type==='always'?' selected':'')+'>每次打开都显示（可手动关闭当次）</option></select></label><label style="flex-direction:row;align-items:center;gap:8px;display:flex"><input type="checkbox" id="ann-pinned"'+(annDraft&&annDraft.pinned?' checked':'')+'> 置顶（置顶公告排在最前）</label><div class="toolbar"><button class="primary" id="ann-save">'+(editingAnn?'保存修改':'发布公告')+'</button>'+(editingAnn?'<button id="ann-cancel">取消编辑</button>':'')+'</div></div></div><div class="card"><b>已发布公告</b><table><thead><tr><th>公告</th><th>操作</th></tr></thead><tbody>'+(rows||'<tr><td colspan="2" class="muted">还没有公告</td></tr>')+'</tbody></table></div>';$('#ann-save').onclick=function(){var title=$('#ann-title').value.trim(),content=$('#ann-content').value,pinned=$('#ann-pinned').checked,type=$('#ann-type').value;if(!title)return alert('标题不能为空');var body=JSON.stringify({title:title,content:content,pinned:pinned,type:type});var req=editingAnn?api('/api/shiyadmin/announcements/'+editingAnn,{method:'PATCH',body:body}):api('/api/shiyadmin/announcements',{method:'POST',body:body});req.then(function(){editingAnn='';annDraft=null;renderAnn()}).catch(function(e){alert(e.message)})};var cancel=$('#ann-cancel');if(cancel)cancel.onclick=function(){editingAnn='';annDraft=null;renderAnn()}}).catch(function(e){fail(c,e)})}
+var marketFilter='pending';
+function renderMarketReviews(){var c=$('#content');var statusName={pending:'待审',approved:'已发布',rejected:'未通过',withdrawn:'开发者已撤回',superseded:'旧版本',hidden:'已下架'};var kindName={plugin:'插件',theme:'主题'};var capName={time:'时间',music:'音乐',web_search:'联网搜索',travel_guidance:'出行引导'};api('/api/shiyadmin/market/submissions'+(marketFilter?'?status='+encodeURIComponent(marketFilter):'')).then(function(d){var rows=(d.submissions||[]).map(function(x){var facets=[];try{facets=JSON.parse(x.capabilities||'[]')}catch{}var facetText=facets.map(function(v){return capName[v]||v}).join('、')||'未标注';var kind=x.asset_type==='theme'?'主题':'插件';var ops='<button class="small" data-market-act="view" data-id="'+esc(x.id)+'">查看</button>';if(x.status==='pending')ops+='<button class="small primary" data-market-act="approve" data-id="'+esc(x.id)+'">通过</button><button class="small danger" data-market-act="reject" data-id="'+esc(x.id)+'">拒绝</button>';if(x.status==='approved')ops+='<button class="small danger" data-market-act="unpublish" data-id="'+esc(x.id)+'">下架</button>';return '<tr><td><b>'+esc(x.name)+'</b> <span class="muted">v'+esc(x.version)+'</span><div class="muted" style="font-size:11px">'+esc(x.asset_id)+(x.source_ref?' / '+esc(x.source_ref):'')+'</div></td><td><span class="tag '+esc(x.status)+'">'+esc(kind)+'</span><div class="muted hide-sm" style="font-size:11px">'+esc(x.owner_name)+'<br>'+esc(x.owner_id)+'</div></td><td>'+esc(facetText)+'<div class="muted" style="max-width:340px;font-size:11px">'+esc((x.summary||'').slice(0,100))+'</div>'+(x.source_url?'<div class="muted" style="max-width:340px;font-size:11px;overflow-wrap:anywhere"><a href="'+esc(x.source_url)+'" target="_blank" rel="noopener noreferrer">'+esc(x.source_url)+'</a></div>':'')+'</td><td><span class="tag '+esc(x.status)+'">'+esc(statusName[x.status]||x.status)+'</span><div class="muted hide-sm" style="font-size:11px">'+fmtTime(x.created_at)+'</div></td><td><div class="ops">'+ops+'</div></td></tr>'}).join('');c.innerHTML='<div class="card"><div class="toolbar"><select id="market-status"><option value="pending"'+(marketFilter==='pending'?' selected':'')+'>待审核</option><option value="approved"'+(marketFilter==='approved'?' selected':'')+'>已发布</option><option value="rejected"'+(marketFilter==='rejected'?' selected':'')+'>未通过</option><option value="hidden"'+(marketFilter==='hidden'?' selected':'')+'>已下架</option><option value="withdrawn"'+(marketFilter==='withdrawn'?' selected':'')+'>开发者撤回</option><option value=""'+(marketFilter===''?' selected':'')+'>全部记录</option></select><b>插件与主题审核</b><span class="muted">发布、拒绝和下架需要管理员操作。审核材料来自仓库默认分支的 shiyu.json。</span></div><div style="overflow:auto"><table><thead><tr><th>作品</th><th>类型 / 开发者</th><th>能力或标签 / 仓库</th><th>状态</th><th>操作</th></tr></thead><tbody>'+(rows||'<tr><td colspan="5" class="muted">当前没有符合条件的投稿</td></tr>')+'</tbody></table></div></div>';$('#market-status').onchange=function(){marketFilter=this.value;renderMarketReviews()};c.querySelectorAll('[data-market-act]').forEach(function(b){b.onclick=function(){var id=b.dataset.id,act=b.dataset.marketAct;if(act==='view'){var item=(d.submissions||[]).find(function(x){return x.id===id});$('#modal-title').textContent=(item?item.name:'作品')+' / 审核材料';var detail='';try{detail=JSON.stringify(JSON.parse(item.manifest_json),null,2)}catch{detail=item?item.manifest_json:''}if(item&&item.source_url)detail='仓库：'+item.source_url+'\\n分支：'+item.source_ref+'\\n\\n'+detail;$('#modal-body').textContent=detail;$('#modal').classList.add('open');return}var note=prompt(act==='approve'?'审核备注（可选）':'必须填写拒绝或下架原因');if(note===null)return;if(act!=='approve'&&!note.trim())return alert('请填写审核说明');api('/api/shiyadmin/market/submissions/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({action:act,note:note.trim()})}).then(function(){renderMarketReviews()}).catch(function(e){alert(e.message)})}})}).catch(function(e){fail(c,e)})}
 document.addEventListener('click',function(ev){var b=ev.target.closest('[data-act]');if(!b)return;var id=b.dataset.id,act=b.dataset.act;if(act==='approve'||act==='hide'||act==='reject'){var st=act==='approve'?'approved':act==='hide'?'hidden':'rejected';api('/api/shiyadmin/cards/'+id,{method:'PATCH',body:JSON.stringify({status:st})}).then(function(){renderCards()}).catch(function(e){alert(e.message)})}else if(act==='delcard'){if(!confirm('确定删除这张角色卡？其下所有评论也会删除，不可恢复。'))return;api('/api/shiyadmin/cards/'+id,{method:'DELETE'}).then(function(){renderCards()}).catch(function(e){alert(e.message)})}else if(act==='view'){api('/api/shiyadmin/cards/'+id).then(function(d){$('#modal-title').textContent=d.card.title+' · '+d.card.status;$('#modal-body').textContent=d.card.card_json||'（空）';$('#modal').classList.add('open')}).catch(function(e){alert(e.message)})}else if(act==='deluser'){if(!confirm('确定删除该用户的全部云端数据？用户本地数据不受影响，但下次同步会重新上传。'))return;api('/api/shiyadmin/users/'+encodeURIComponent(id),{method:'DELETE'}).then(function(){renderUsers()}).catch(function(e){alert(e.message)})}else if(act==='delcomment'){if(!confirm('确定删除这条评论？'))return;api('/api/shiyadmin/comments/'+id,{method:'DELETE'}).then(function(){renderComments()}).catch(function(e){alert(e.message)})}else if(act==='editann'){api('/api/shiyadmin/announcements').then(function(d){var a=(d.announcements||[]).find(function(x){return x.id===id});if(!a)return;editingAnn=id;annDraft={title:a.title,content:a.content,pinned:!!a.pinned,type:a.type||'once'};renderAnn()}).catch(function(e){alert(e.message)})}else if(act==='pinann'){api('/api/shiyadmin/announcements').then(function(d){var a=(d.announcements||[]).find(function(x){return x.id===id});if(!a)return;api('/api/shiyadmin/announcements/'+id,{method:'PATCH',body:JSON.stringify({title:a.title,content:a.content,pinned:!a.pinned,type:a.type||'once'})}).then(function(){renderAnn()})}).catch(function(e){alert(e.message)})}else if(act==='delann'){if(!confirm('确定删除这条公告？'))return;api('/api/shiyadmin/announcements/'+id,{method:'DELETE'}).then(function(){if(editingAnn===id){editingAnn='';annDraft=null}renderAnn()}).catch(function(e){alert(e.message)})}});
 function closeModal(){$('#modal').classList.remove('open')}
 document.querySelectorAll('.tabs button').forEach(function(b){b.addEventListener('click',function(){TAB=b.dataset.tab;render()})});
@@ -229,6 +235,99 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (request.method === 'GET' && path === '/downloads/shiyu-0.9.1.apk') return redirect('https://github.com/tniany/shiyu-releases/releases/download/v0.9.1/shiyu-0.9.1.apk');
   if (request.method === 'GET' && path === '/downloads/shiyu-0.9.0.apk') return redirect('https://github.com/tniany/shiyu-releases/releases/download/v0.9.0/app-release.apk');
   if (request.method === 'GET' && env.ADMIN_ROUTE && path === `/${env.ADMIN_ROUTE.replace(/^\/+|\/+$/g, '')}`) return adminPage();
+  if (request.method === 'GET' && path === '/market/docs') return html(withMarketplaceSettingsDocs(marketplaceDocsPage()));
+  if (request.method === 'GET' && path === '/market/submit') return html(developerMarketPage());
+  if (request.method === 'GET' && path === '/api/market/catalog.json') {
+    const baseResponse = await env.ASSETS.fetch(new Request(new URL('/market/catalog.json', url), { method: 'GET' }));
+    if (!baseResponse.ok) return json({ error: 'MARKET_BASE_UNAVAILABLE', message: '官方市场基础目录暂不可用' }, 503);
+    let base: any;
+    try { base = await baseResponse.json(); } catch { return json({ error: 'MARKET_BASE_INVALID', message: '官方市场基础目录格式无效' }, 503); }
+    let approved: any[] = [];
+    try {
+      const rows = await env.DB.prepare('SELECT asset_type, asset_id, source_url, source_ref, manifest_json FROM market_approved_assets ORDER BY approved_at DESC LIMIT 200').all();
+      approved = rows.results || [];
+    } catch (error) {
+      console.error('market approved asset query failed', error);
+    }
+    const catalog = mergePublicCatalog(base, approved, hongKongDay(Date.now()));
+    return new Response(JSON.stringify(catalog), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=60, stale-while-revalidate=120', 'x-content-type-options': 'nosniff' } });
+  }
+  if (request.method === 'POST' && path === '/api/market/repository/inspect') {
+    const user = await auth(request, env);
+    if (!user) return json({ error: 'LOGIN_REQUIRED', message: '请先使用时遇账号登录' }, 401);
+    const raw = await request.text();
+    if (raw.length > 4_000) return json({ error: 'TOO_LARGE', message: '仓库地址请求超过 4KB 限制' }, 413);
+    let body: any;
+    try { body = JSON.parse(raw); } catch { return json({ error: 'INVALID_JSON', message: '请求格式无效' }, 400); }
+    const inspection = await inspectGitHubRepository(body.repositoryUrl, { token: env.GITHUB_TOKEN || '' });
+    if (!inspection.ok) return json({ error: 'SOURCE_INSPECTION_FAILED', field: inspection.field, message: inspection.message }, 422);
+    return json({
+      ok: true,
+      repository: inspection.repository,
+      assetId: inspection.assetId,
+      version: inspection.version,
+      manifest: inspection.manifest,
+      manifestSha256: inspection.manifestSha256
+    });
+  }
+
+  if (request.method === 'POST' && (path === '/api/market/submissions' || path === '/api/market/plugin-submissions')) {
+    const user = await auth(request, env);
+    if (!user) return json({ error: 'LOGIN_REQUIRED', message: '请先使用时遇账号登录' }, 401);
+    const raw = await request.text();
+    if (raw.length > 4_000) return json({ error: 'TOO_LARGE', message: '仓库地址请求超过 4KB 限制' }, 413);
+    let body: any;
+    try { body = JSON.parse(raw); } catch { return json({ error: 'INVALID_JSON', message: '请求格式无效' }, 400); }
+    const expected = cleanText(body.expectedManifestSha256, 64).toLowerCase();
+    if (expected && !/^[a-f0-9]{64}$/.test(expected)) return json({ error: 'INVALID_SOURCE_HASH', message: '识别摘要格式无效' }, 400);
+    const inspection = await inspectGitHubRepository(body.repositoryUrl, { token: env.GITHUB_TOKEN || '' });
+    if (!inspection.ok) return json({ error: 'SOURCE_INSPECTION_FAILED', field: inspection.field, message: inspection.message }, 422);
+    if (expected && expected !== inspection.manifestSha256) {
+      return json({ error: 'SOURCE_CHANGED', message: '识别后 shiyu.json 已发生变化，请重新识别仓库' }, 409);
+    }
+    const assetType = inspection.manifest.kind;
+    const existing = await env.DB.prepare('SELECT owner_id FROM market_plugin_submissions WHERE asset_type = ? AND plugin_id = ? ORDER BY created_at ASC LIMIT 1').bind(assetType, inspection.assetId).first();
+    if (existing && String(existing.owner_id) !== user.id) return json({ error: 'ASSET_ID_OWNED', message: '这个作品 ID 已由其他开发者使用' }, 409);
+    const pendingCount = await env.DB.prepare("SELECT COUNT(*) AS n FROM market_plugin_submissions WHERE owner_id = ? AND status = 'pending'").bind(user.id).first();
+    if (Number(pendingCount?.n || 0) >= 3) return json({ error: 'TOO_MANY_PENDING', message: '每个账号最多同时保留 3 个待审作品，请等待审核或撤回' }, 429);
+    const duplicate = await env.DB.prepare("SELECT id FROM market_plugin_submissions WHERE asset_type = ? AND plugin_id = ? AND status = 'pending' LIMIT 1").bind(assetType, inspection.assetId).first();
+    if (duplicate) return json({ error: 'ALREADY_PENDING', message: '这个作品已有待审版本，请等待审核完成' }, 409);
+    const submissionId = id(); const timestamp = now(); const manifest = inspection.manifest;
+    const facetJson = assetType === 'plugin' ? manifest.capabilities : manifest.tags;
+    const icon = assetType === 'plugin' ? manifest.icon : 'extension';
+    const category = assetType === 'plugin' ? manifest.category : '主题外观';
+    try {
+      await env.DB.batch([
+        env.DB.prepare('INSERT INTO market_plugin_submissions (id,owner_id,owner_name,plugin_id,version,name,summary,description,category,icon,capabilities_json,manifest_json,status,created_at,updated_at,asset_type,source_url,source_ref,manifest_sha256) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(submissionId,user.id,user.name,inspection.assetId,inspection.version,manifest.name,manifest.summary,manifest.description,category,icon,JSON.stringify(facetJson),JSON.stringify(manifest),'pending',timestamp,timestamp,assetType,inspection.repository.canonicalUrl,inspection.repository.defaultBranch,inspection.manifestSha256),
+        env.DB.prepare('INSERT INTO market_plugin_review_events (id,submission_id,actor_id,action,note,created_at) VALUES (?,?,?,?,?,?)').bind(id(),submissionId,user.id,'submitted','',timestamp)
+      ]);
+    } catch (error) {
+      if (String(error).includes('one_pending')) return json({ error: 'ALREADY_PENDING', message: '这个作品已有待审版本' }, 409);
+      throw error;
+    }
+    return json({ id: submissionId, status: 'pending', assetType }, 201);
+  }
+
+  if (request.method === 'GET' && (path === '/api/market/submissions/mine' || path === '/api/market/plugin-submissions/mine')) {
+    const user = await auth(request, env);
+    if (!user) return json({ error: 'LOGIN_REQUIRED', message: '请先登录' }, 401);
+    const rows = await env.DB.prepare('SELECT id,asset_type,plugin_id AS asset_id,version,name,summary,category,capabilities_json AS capabilities,source_url,source_ref,status,reviewer_note,created_at,updated_at FROM market_plugin_submissions WHERE owner_id = ? ORDER BY created_at DESC LIMIT 100').bind(user.id).all();
+    return json({ submissions: rows.results || [] });
+  }
+
+  const withdrawMatch = path.match(/^\/api\/market\/(?:plugin-)?submissions\/([^/]+)\/withdraw$/);
+  if (request.method === 'POST' && withdrawMatch) {
+    const user = await auth(request, env); if (!user) return json({ error: 'LOGIN_REQUIRED' }, 401);
+    const row = await env.DB.prepare('SELECT id,owner_id,status FROM market_plugin_submissions WHERE id = ?').bind(withdrawMatch[1]).first();
+    if (!row || String(row.owner_id) !== user.id) return json({ error: 'NOT_FOUND' }, 404);
+    if (String(row.status) !== 'pending') return json({ error: 'INVALID_STATUS', message: '只有待审版本可以撤回' }, 409);
+    const timestamp = now();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE market_plugin_submissions SET status = 'withdrawn',updated_at = ? WHERE id = ?").bind(timestamp,withdrawMatch[1]),
+      env.DB.prepare('INSERT INTO market_plugin_review_events (id,submission_id,actor_id,action,note,created_at) VALUES (?,?,?,?,?,?)').bind(id(),withdrawMatch[1],user.id,'withdrawn','',timestamp)
+    ]);
+    return json({ success: true, status: 'withdrawn' });
+  }
   if (request.method === 'GET' && path === '/auth/login') { const state = id(); const verifier = base64url(crypto.getRandomValues(new Uint8Array(48))); const challenge = await pkceChallenge(verifier); const redirectUri = `${url.origin}/auth/callback`; const returnTo = safeReturnPath(url); const authorize = new URL(`${env.AUTH_ISSUER.replace(/\/$/, '')}/oauth/authorize`); authorize.searchParams.set('response_type','code'); authorize.searchParams.set('client_id',env.AUTH_CLIENT_ID); authorize.searchParams.set('redirect_uri',redirectUri); authorize.searchParams.set('state',state); authorize.searchParams.set('scope','profile qq'); authorize.searchParams.set('code_challenge',challenge); authorize.searchParams.set('code_challenge_method','S256'); const secure = url.protocol === 'https:' ? '; Secure' : ''; const cookieBase = `Path=/; HttpOnly; SameSite=Lax${secure}; Max-Age=600`; return redirect(authorize.toString(), [`shiyu_square_oauth_state=${state}; ${cookieBase}`, `shiyu_square_oauth_verifier=${verifier}; ${cookieBase}`, `shiyu_square_auth_return=${encodeURIComponent(returnTo)}; ${cookieBase}`]); }
   if (request.method === 'GET' && path === '/auth/callback') { const code=url.searchParams.get('code')||''; const state=url.searchParams.get('state')||''; const oauthError=url.searchParams.get('error_description')||url.searchParams.get('error')||''; const verifier = cookie(request,'shiyu_square_oauth_verifier'); let returnTo = '/'; try { returnTo = safeReturnPath(url, decodeURIComponent(cookie(request,'shiyu_square_auth_return') || '/')); } catch {} const secure = url.protocol === 'https:' ? '; Secure' : ''; const cookieBase = `Path=/; HttpOnly; SameSite=Lax${secure}`; const clearCookies = [`shiyu_square_oauth_state=; ${cookieBase}; Max-Age=0`,`shiyu_square_oauth_verifier=; ${cookieBase}; Max-Age=0`,`shiyu_square_auth_return=; ${cookieBase}; Max-Age=0`]; if (oauthError) return html(authResultPage(url.origin,returnTo,false,oauthError),400,clearCookies); if (!code || !state || state !== cookie(request,'shiyu_square_oauth_state') || !verifier) return html(authResultPage(url.origin,returnTo,false,'state 或 PKCE 校验不匹配，请重新登录'),400,clearCookies); const form=new URLSearchParams({grant_type:'authorization_code',client_id:env.AUTH_CLIENT_ID,code,redirect_uri:`${url.origin}/auth/callback`,code_verifier:verifier}); const requestToken=(withSecret:boolean)=>authFetch(env,'/oauth/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded',...(withSecret&&env.AUTH_CLIENT_SECRET?{authorization:`Basic ${btoa(`${env.AUTH_CLIENT_ID}:${env.AUTH_CLIENT_SECRET}`)}`}:{})},body:form}); let tokenResponse=await requestToken(Boolean(env.AUTH_CLIENT_SECRET)); let tokenText=await tokenResponse.text(); let token:any={}; try { token=JSON.parse(tokenText); } catch {} if (!tokenResponse.ok && env.AUTH_CLIENT_SECRET && token.error==='invalid_client') { tokenResponse=await requestToken(false); tokenText=await tokenResponse.text(); try { token=JSON.parse(tokenText); } catch { token={}; } } if (!tokenResponse.ok) { const detail=token.error_description||token.error||`登录服务返回 HTTP ${tokenResponse.status}${tokenText ? `：${tokenText.slice(0,180)}` : ''}`; return html(authResultPage(url.origin,returnTo,false,detail),502,clearCookies); } if (!token.access_token) return html(authResultPage(url.origin,returnTo,false,'登录服务返回的令牌为空'),502,clearCookies); await reportWebLogin(env, token.access_token); return html(authResultPage(url.origin,returnTo,true,'登录成功'),200,[`shiyu_square_session=${token.access_token}; ${cookieBase}; Max-Age=${Number(token.expires_in||3600)}`,...clearCookies]); }
   if (request.method === 'GET' && path === '/auth/me') { const user=await auth(request,env); return json(user ? { loggedIn:true,user } : { loggedIn:false }); }
@@ -402,6 +501,61 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json({ success: true });
   }
   if (match && request.method === 'DELETE') { if (!await admin(request, env)) return json({ error: 'ADMIN_REQUIRED' }, 401); const out = await env.DB.prepare('DELETE FROM announcements WHERE id = ?').bind(match[1]).run(); return json({ success: true, deleted: out.meta.changes || 0 }); }
+  if (path === '/api/shiyadmin/market/submissions' && request.method === 'GET') {
+    if (!await admin(request, env)) return json({ error: 'ADMIN_REQUIRED' }, 401);
+    const requested = url.searchParams.get('status') || '';
+    const status = ['pending','approved','rejected','withdrawn','superseded','hidden'].includes(requested) ? requested : '';
+    let sql = 'SELECT id,owner_id,owner_name,asset_type,plugin_id AS asset_id,version,name,summary,description,category,icon,capabilities_json AS capabilities,manifest_json,source_url,source_ref,manifest_sha256,status,reviewer_note,reviewed_by,reviewed_at,created_at,updated_at FROM market_plugin_submissions';
+    const binds: any[] = [];
+    if (status) { sql += ' WHERE status = ?'; binds.push(status); }
+    sql += ' ORDER BY created_at DESC LIMIT 200';
+    const rows = await env.DB.prepare(sql).bind(...binds).all();
+    return json({ submissions: rows.results || [] });
+  }
+  const marketReviewMatch = path.match(/^\/api\/shiyadmin\/market\/submissions\/([^/]+)$/);
+  if (marketReviewMatch && request.method === 'PATCH') {
+    const reviewer = await admin(request, env);
+    if (!reviewer) return json({ error: 'ADMIN_REQUIRED' }, 401);
+    let body: any;
+    try { body = await request.json(); } catch { return json({ error: 'INVALID_JSON' }, 400); }
+    const action = ['approve','reject','unpublish'].includes(body.action) ? body.action : '';
+    if (!action) return json({ error: 'INVALID_ACTION' }, 400);
+    const note = cleanText(body.note, 1000);
+    if ((action === 'reject' || action === 'unpublish') && !note) return json({ error: 'NOTE_REQUIRED', message: '拒绝或下架时必须填写审核说明' }, 400);
+    const row = await env.DB.prepare('SELECT id,owner_id,owner_name,asset_type,plugin_id AS asset_id,version,manifest_json,source_url,source_ref,manifest_sha256,status FROM market_plugin_submissions WHERE id = ?').bind(marketReviewMatch[1]).first();
+    if (!row) return json({ error: 'NOT_FOUND' }, 404);
+    const nextStatus = reviewTransition(String(row.status), action);
+    if (!nextStatus) return json({ error: 'INVALID_STATUS', message: '当前状态不能执行这个审核操作' }, 409);
+    const timestamp = now();
+    if (action === 'approve') {
+      let manifest: any;
+      try { manifest = JSON.parse(String(row.manifest_json || '{}')); } catch { return json({ error: 'INVALID_MANIFEST' }, 409); }
+      const validation = validateMarketplaceManifest(manifest);
+      if (!validation.ok) return json({ error: 'INVALID_MANIFEST', field: validation.field, message: validation.message }, 409);
+      if (String(manifest.id || '') !== String(row.asset_id || '') || String(manifest.version || '') !== String(row.version || '')) return json({ error: 'MANIFEST_MISMATCH' }, 409);
+      if (String(manifest.kind || '') !== String(row.asset_type || '')) return json({ error: 'MANIFEST_MISMATCH' }, 409);
+      await env.DB.batch([
+        env.DB.prepare("UPDATE market_plugin_submissions SET status = 'superseded',updated_at = ? WHERE asset_type = ? AND plugin_id = ? AND status = 'approved' AND id <> ?").bind(timestamp,row.asset_type,row.asset_id,row.id),
+        env.DB.prepare('INSERT INTO market_approved_assets (asset_type,asset_id,submission_id,owner_id,owner_name,source_url,source_ref,manifest_sha256,manifest_json,approved_by,approved_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(asset_type,asset_id) DO UPDATE SET submission_id=excluded.submission_id,owner_id=excluded.owner_id,owner_name=excluded.owner_name,source_url=excluded.source_url,source_ref=excluded.source_ref,manifest_sha256=excluded.manifest_sha256,manifest_json=excluded.manifest_json,approved_by=excluded.approved_by,approved_at=excluded.approved_at,updated_at=excluded.updated_at').bind(row.asset_type,row.asset_id,row.id,row.owner_id,row.owner_name,row.source_url,row.source_ref,row.manifest_sha256,JSON.stringify(validation.manifest),reviewer.id,timestamp,timestamp),
+        env.DB.prepare("UPDATE market_plugin_submissions SET status = 'approved',reviewer_note = ?,reviewed_by = ?,reviewed_at = ?,updated_at = ? WHERE id = ?").bind(note,reviewer.id,timestamp,timestamp,row.id),
+        env.DB.prepare('INSERT INTO market_plugin_review_events (id,submission_id,actor_id,action,note,created_at) VALUES (?,?,?,?,?,?)').bind(id(),row.id,reviewer.id,'approved',note,timestamp)
+      ]);
+      return json({ success: true, status: 'approved' });
+    }
+    if (action === 'reject') {
+      await env.DB.batch([
+        env.DB.prepare("UPDATE market_plugin_submissions SET status = 'rejected',reviewer_note = ?,reviewed_by = ?,reviewed_at = ?,updated_at = ? WHERE id = ?").bind(note,reviewer.id,timestamp,timestamp,row.id),
+        env.DB.prepare('INSERT INTO market_plugin_review_events (id,submission_id,actor_id,action,note,created_at) VALUES (?,?,?,?,?,?)').bind(id(),row.id,reviewer.id,'rejected',note,timestamp)
+      ]);
+      return json({ success: true, status: 'rejected' });
+    }
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM market_approved_assets WHERE asset_type = ? AND asset_id = ? AND submission_id = ?').bind(row.asset_type,row.asset_id,row.id),
+      env.DB.prepare("UPDATE market_plugin_submissions SET status = 'hidden',reviewer_note = ?,reviewed_by = ?,reviewed_at = ?,updated_at = ? WHERE id = ?").bind(note,reviewer.id,timestamp,timestamp,row.id),
+      env.DB.prepare('INSERT INTO market_plugin_review_events (id,submission_id,actor_id,action,note,created_at) VALUES (?,?,?,?,?,?)').bind(id(),row.id,reviewer.id,'unpublished',note,timestamp)
+    ]);
+    return json({ success: true, status: 'hidden' });
+  }
   if (request.method === 'GET' || request.method === 'HEAD') return env.ASSETS.fetch(request);
   return json({ error: 'NOT_FOUND' }, 404);
 }

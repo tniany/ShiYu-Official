@@ -126,7 +126,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
-private enum class Page { ADULT_CONFIRM, ONBOARDING, STARTUP_LOADING, COMMUNITY_INVITE, FEEDBACK, TERMS, DATA_RESCUE, MAIN, CHAT, CHAT_SEARCH, CHAT_DETAIL, CHAT_MODEL, CHAT_IDENTITY, CHAT_CONTENT, CHAT_CONTEXT, CHAT_TTS, CHAT_BACKGROUND, MEMORY_SUMMARY, PLOT_NODES, DIARIES, PROACTIVE, YANDERE, MOMENT_SHARE, CHAT_DEFAULTS, COMMON_RULES, STORIES, STORY_EDIT, GENERATION_TASKS, ROLE_SETTINGS, ROLE_PROFILE, ROLE_SESSIONS, MUSIC, TOGETHER_LISTEN, WORLD_GAMES, WORLD_ACTIVITY, WORLD_HOME_3D, WORLD_WARDROBE, MEMORY, RENAME_CHAT, CREATE_ROLE, GROUP_SETUP, CARD_CENTER, CARD_EXPORT, IMPORT_PREVIEW, MOMENTS, MOMENT_PERMISSIONS, MOMENT_ROLE_POST, MOMENT_COMMENTS, API, API_ERROR, PROVIDER, ADD_PROVIDER, CONNECTION, MODEL, LOCAL_MODELS, GENERATION, AUXILIARY_MODELS, MCP_TOOLS, WEB_SEARCH, EMBEDDING_LIBRARY, VIDEO_GENERATION, IMAGE_GENERATION, TTS, APPEARANCE, CHAT_APPEARANCE, FRAME_RATE, DATA, BACKUP, STICKER_RESOURCES, REALITY_AWARENESS, EXPERIMENTAL, DESKTOP_PET, WEIXIN_LINK, QQ_BOT, SETTINGS_SEARCH, GUIDE, LANGUAGE, ABOUT, UPDATE_HISTORY, SUPPORT, USER_PROFILE, IDENTITIES, APP_BEHAVIOR }
+private enum class Page { ADULT_CONFIRM, ONBOARDING, STARTUP_LOADING, COMMUNITY_INVITE, FEEDBACK, TERMS, DATA_RESCUE, MAIN, CHAT, CHAT_SEARCH, CHAT_DETAIL, CHAT_MODEL, CHAT_IDENTITY, CHAT_CONTENT, CHAT_CONTEXT, CHAT_TTS, CHAT_BACKGROUND, MEMORY_SUMMARY, PLOT_NODES, DIARIES, PROACTIVE, YANDERE, MOMENT_SHARE, CHAT_DEFAULTS, COMMON_RULES, STORIES, STORY_EDIT, GENERATION_TASKS, ROLE_SETTINGS, ROLE_PROFILE, ROLE_SESSIONS, MUSIC, TOGETHER_LISTEN, WORLD_GAMES, WORLD_ACTIVITY, WORLD_HOME_3D, WORLD_WARDROBE, MEMORY, RENAME_CHAT, CREATE_ROLE, GROUP_SETUP, CARD_CENTER, CARD_EXPORT, IMPORT_PREVIEW, MOMENTS, MOMENT_PERMISSIONS, MOMENT_ROLE_POST, MOMENT_COMMENTS, API, API_ERROR, PROVIDER, ADD_PROVIDER, CONNECTION, MODEL, LOCAL_MODELS, GENERATION, AUXILIARY_MODELS, MCP_TOOLS, WEB_SEARCH, EMBEDDING_LIBRARY, VIDEO_GENERATION, IMAGE_GENERATION, TTS, APPEARANCE, CHAT_APPEARANCE, FRAME_RATE, DATA, BACKUP, STICKER_RESOURCES, REALITY_AWARENESS, EXPERIMENTAL, DESKTOP_PET, MARKET, WEIXIN_LINK, QQ_BOT, SETTINGS_SEARCH, GUIDE, LANGUAGE, ABOUT, UPDATE_HISTORY, SUPPORT, USER_PROFILE, IDENTITIES, APP_BEHAVIOR }
 private enum class VoiceCallPhase { IDLE, READY, LISTENING, TRANSCRIBING, THINKING, SPEAKING, ERROR }
 private val mainBottomBarClearance = 88.dp
 
@@ -587,7 +587,7 @@ class ComposeActivity : MainActivity() {
   private fun activeImageProvider():ImageProviderConfig?{val values=imageProviders();val id=prefs.getString("active_image_provider_id","").orEmpty();return values.firstOrNull{it.id==id}?:values.firstOrNull()}
   private fun imagePromptConfig(raw:String):ImagePromptConfig=runCatching{val value=JSONObject(raw);ImagePromptConfig(value.optString("positive"),value.optString("negative"),value.optString("style","natural"))}.getOrElse{ImagePromptConfig(raw,prefs.getString("image_generation_negative","lowres, bad anatomy, blurry").orEmpty())}
   private fun imagePromptJson(positive:String,negative:String,style:String)=JSONObject().put("positive",positive.trim()).put("negative",negative.trim()).put("style",style).toString()
-  private val appearanceConfigDefaults=linkedMapOf<String,Any>("compose_theme" to 0,"compose_theme_style" to 0,"refresh_rate" to 0,"chat_font_size" to 15,"chat_bubble_spacing" to 8,"chat_line_height" to 22,"chat_background_color" to "","chat_user_bubble_color" to "","chat_ai_bubble_color" to "","chat_no_bubbles" to false,"chat_hide_avatars" to false,"reply_suggestion_position" to "bubble","chat_half_screen" to false,"chat_bubble_actions" to "latest","chat_user_bubble_opacity" to 100,"chat_ai_bubble_opacity" to 100,"chat_bubble_max_width" to 292,"chat_bubble_vertical_padding" to 10,"chat_input_min_height" to 42,"chat_background_overlay" to 20,"experimental_input_glass" to false,"experimental_top_bar_transparent" to false,"experimental_glass_ui" to false,"experimental_glass_opacity" to 78)
+  private val appearanceConfigDefaults=linkedMapOf<String,Any>("compose_theme" to 0,"compose_theme_style" to 0,"refresh_rate" to 0,"chat_font_size" to 15,"chat_bubble_spacing" to 8,"chat_line_height" to 22,"chat_background_color" to "","chat_user_bubble_color" to "","chat_ai_bubble_color" to "","chat_no_bubbles" to false,"chat_hide_avatars" to false,"reply_suggestion_position" to "bubble","chat_half_screen" to false,"chat_bubble_actions" to "latest","chat_user_bubble_opacity" to 100,"chat_ai_bubble_opacity" to 100,"chat_bubble_max_width" to 292,"chat_bubble_vertical_padding" to 10,"chat_input_min_height" to 42,"chat_background_overlay" to 20,"experimental_input_glass" to false,"experimental_top_bar_transparent" to false,"experimental_glass_ui" to true,"experimental_glass_opacity" to 78)
   private fun appearanceConfigJson():JSONObject{
     val values=JSONObject();appearanceConfigDefaults.forEach{(key,default)->values.put(key,prefs.all[key]?:default)}
     return JSONObject().put("format","shiyu_appearance").put("version",1).put("values",values)
@@ -597,6 +597,23 @@ class ComposeActivity : MainActivity() {
     val allowed=appearanceConfigDefaults.keys;val editor=prefs.edit()
     values.keys().forEach{key->if(key in allowed)when(val value=values.get(key)){is Boolean->editor.putBoolean(key,value);is Int->editor.putInt(key,value);is Long->editor.putLong(key,value);is Double->editor.putFloat(key,value.toFloat());is String->editor.putString(key,value)}}
     editor.apply();applyPreferredRefreshRate();uiRevision++
+  }
+  private fun sanitizeMarketThemeValues(source:JSONObject):JSONObject{
+    val numericRanges=mapOf("compose_theme" to 0..2,"compose_theme_style" to 0..4,"refresh_rate" to 0..165,"chat_font_size" to 12..20,"chat_bubble_spacing" to 2..16,"chat_line_height" to 16..32,"chat_user_bubble_opacity" to 10..100,"chat_ai_bubble_opacity" to 10..100,"chat_bubble_max_width" to 240..360,"chat_bubble_vertical_padding" to 6..20,"chat_input_min_height" to 40..64,"chat_background_overlay" to 0..70,"experimental_glass_opacity" to 20..100)
+    val colors=setOf("chat_background_color","chat_user_bubble_color","chat_ai_bubble_color")
+    val stringOptions=mapOf("reply_suggestion_position" to setOf("bubble","input"),"chat_bubble_actions" to setOf("latest","hidden"))
+    val result=JSONObject()
+    source.keys().forEach{key->
+      val defaultValue=appearanceConfigDefaults[key]?:return@forEach
+      when(val value=source.opt(key)){
+        is Boolean->if(defaultValue is Boolean)result.put(key,value)
+        is Int->numericRanges[key]?.let{range->result.put(key,value.coerceIn(range.first,range.last))}
+        is Long->numericRanges[key]?.let{range->result.put(key,value.coerceIn(range.first.toLong(),range.last.toLong()).toInt())}
+        is Double->numericRanges[key]?.let{range->result.put(key,value.toInt().coerceIn(range.first,range.last))}
+        is String->when{key in colors->normalizeStoredColor(value)?.let{result.put(key,it)};stringOptions[key]?.contains(value)==true->result.put(key,value)}
+      }
+    }
+    return result
   }
   private fun shareAppearanceConfig(){
     runCatching{val directory=File(cacheDir,"shared").apply{mkdirs()};val file=File(directory,"shiyu-appearance.json");FileOutputStream(file).use{it.write(appearanceConfigJson().toString(2).toByteArray(Charsets.UTF_8))};val uri=androidx.core.content.FileProvider.getUriForFile(this,"$packageName.files",file);startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("application/json").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),"分享外观配置"))}.onFailure{toast("分享外观配置失败：${it.message}")}
@@ -843,7 +860,7 @@ class ComposeActivity : MainActivity() {
   private fun isLocalProviderEndpoint(raw:String):Boolean{val value=raw.trim();if(value.startsWith("local://in-app",true))return true;return runCatching{when(android.net.Uri.parse(value).host?.lowercase(Locale.ROOT)){"localhost","127.0.0.1","0.0.0.0","::1"->true;else->false}}.getOrDefault(false)}
   private fun activateProvider(value:ProviderConfig){prefs.edit().putString("active_provider_id",value.id).putString("provider",value.name).putString("endpoint",value.endpoint).putString("model",value.modelName).apply();runCatching{secure.put(if(value.endpoint.startsWith("local://in-app",true))"local-in-app" else secure.getNamed("provider_key_${value.id}"))};uiRevision++;toast("已切换到 ${value.name}")}
   private fun adultConsentGranted()=prefs.getString("adult_consent_revision","")==adultConsentRevision
-  private fun pageDepth(value:Page)=when(value){Page.ADULT_CONFIRM,Page.ONBOARDING,Page.STARTUP_LOADING,Page.COMMUNITY_INVITE,Page.DATA_RESCUE,Page.MAIN->0;Page.FEEDBACK,Page.TERMS,Page.API,Page.TTS,Page.CARD_CENTER,Page.APPEARANCE,Page.DATA,Page.STICKER_RESOURCES,Page.REALITY_AWARENESS,Page.EXPERIMENTAL,Page.DESKTOP_PET,Page.STORIES,Page.STORY_EDIT,Page.SETTINGS_SEARCH,Page.GUIDE,Page.LANGUAGE,Page.ABOUT,Page.SUPPORT,Page.USER_PROFILE,Page.GROUP_SETUP,Page.APP_BEHAVIOR,Page.ROLE_SETTINGS,Page.ROLE_SESSIONS,Page.MUSIC,Page.RENAME_CHAT,Page.CREATE_ROLE,Page.MOMENTS,Page.GENERATION_TASKS,Page.WORLD_GAMES,Page.WORLD_ACTIVITY,Page.WORLD_HOME_3D,Page.WORLD_WARDROBE->1;Page.UPDATE_HISTORY,Page.WEIXIN_LINK,Page.QQ_BOT,Page.IDENTITIES,Page.IMPORT_PREVIEW,Page.CARD_EXPORT,Page.CHAT,Page.ROLE_PROFILE,Page.TOGETHER_LISTEN,Page.FRAME_RATE,Page.CHAT_APPEARANCE,Page.BACKUP,Page.API_ERROR,Page.PROVIDER,Page.CONNECTION,Page.MODEL,Page.LOCAL_MODELS,Page.GENERATION,Page.AUXILIARY_MODELS,Page.MCP_TOOLS,Page.WEB_SEARCH,Page.EMBEDDING_LIBRARY,Page.VIDEO_GENERATION,Page.IMAGE_GENERATION,Page.MEMORY,Page.MOMENT_PERMISSIONS,Page.MOMENT_ROLE_POST,Page.MOMENT_COMMENTS,Page.CHAT_DEFAULTS,Page.COMMON_RULES->2;Page.CHAT_SEARCH,Page.CHAT_DETAIL->3;Page.CHAT_MODEL,Page.CHAT_IDENTITY,Page.CHAT_CONTENT,Page.CHAT_CONTEXT,Page.CHAT_TTS,Page.CHAT_BACKGROUND,Page.MEMORY_SUMMARY,Page.PLOT_NODES,Page.DIARIES,Page.PROACTIVE,Page.YANDERE,Page.MOMENT_SHARE->4;Page.ADD_PROVIDER->5}
+  private fun pageDepth(value:Page)=when(value){Page.ADULT_CONFIRM,Page.ONBOARDING,Page.STARTUP_LOADING,Page.COMMUNITY_INVITE,Page.DATA_RESCUE,Page.MAIN->0;Page.FEEDBACK,Page.TERMS,Page.API,Page.TTS,Page.CARD_CENTER,Page.APPEARANCE,Page.DATA,Page.STICKER_RESOURCES,Page.REALITY_AWARENESS,Page.EXPERIMENTAL,Page.MARKET,Page.DESKTOP_PET,Page.STORIES,Page.STORY_EDIT,Page.SETTINGS_SEARCH,Page.GUIDE,Page.LANGUAGE,Page.ABOUT,Page.SUPPORT,Page.USER_PROFILE,Page.GROUP_SETUP,Page.APP_BEHAVIOR,Page.ROLE_SETTINGS,Page.ROLE_SESSIONS,Page.MUSIC,Page.RENAME_CHAT,Page.CREATE_ROLE,Page.MOMENTS,Page.GENERATION_TASKS,Page.WORLD_GAMES,Page.WORLD_ACTIVITY,Page.WORLD_HOME_3D,Page.WORLD_WARDROBE->1;Page.UPDATE_HISTORY,Page.WEIXIN_LINK,Page.QQ_BOT,Page.IDENTITIES,Page.IMPORT_PREVIEW,Page.CARD_EXPORT,Page.CHAT,Page.ROLE_PROFILE,Page.TOGETHER_LISTEN,Page.FRAME_RATE,Page.CHAT_APPEARANCE,Page.BACKUP,Page.API_ERROR,Page.PROVIDER,Page.CONNECTION,Page.MODEL,Page.LOCAL_MODELS,Page.GENERATION,Page.AUXILIARY_MODELS,Page.MCP_TOOLS,Page.WEB_SEARCH,Page.EMBEDDING_LIBRARY,Page.VIDEO_GENERATION,Page.IMAGE_GENERATION,Page.MEMORY,Page.MOMENT_PERMISSIONS,Page.MOMENT_ROLE_POST,Page.MOMENT_COMMENTS,Page.CHAT_DEFAULTS,Page.COMMON_RULES->2;Page.CHAT_SEARCH,Page.CHAT_DETAIL->3;Page.CHAT_MODEL,Page.CHAT_IDENTITY,Page.CHAT_CONTENT,Page.CHAT_CONTEXT,Page.CHAT_TTS,Page.CHAT_BACKGROUND,Page.MEMORY_SUMMARY,Page.PLOT_NODES,Page.DIARIES,Page.PROACTIVE,Page.YANDERE,Page.MOMENT_SHARE->4;Page.ADD_PROVIDER->5}
   private fun chatStateId(page:Page)=if(page in listOf(Page.CHAT,Page.CHAT_SEARCH,Page.CHAT_DETAIL,Page.CHAT_MODEL,Page.CHAT_IDENTITY,Page.CHAT_CONTENT,Page.CHAT_CONTEXT,Page.CHAT_TTS,Page.CHAT_BACKGROUND,Page.MEMORY_SUMMARY,Page.PLOT_NODES,Page.DIARIES,Page.PROACTIVE,Page.YANDERE,Page.MOMENT_SHARE,Page.RENAME_CHAT))selectedChat?.id else null
   private fun englishUi()=androidx.core.os.ConfigurationCompat.getLocales(resources.configuration)[0]?.language=="en"
   private fun ui(zh:String,en:String)=if(englishUi())en else zh
@@ -1138,7 +1155,7 @@ class ComposeActivity : MainActivity() {
       val systemDark = isSystemInDarkTheme()
       val dark = themeMode == 2 || (themeMode == 0 && systemDark)
       val baseColors = themePalette(themeStyle,dark)
-      val colors = if(safePrefBoolean("experimental_glass_ui",false)) glassPalette(baseColors,safePrefInt("experimental_glass_opacity",78)) else baseColors
+      val colors = if(safePrefBoolean("experimental_glass_ui",true)) glassPalette(baseColors,safePrefInt("experimental_glass_opacity",78)) else baseColors
       MaterialTheme(colorScheme = colors, typography = Typography()) {
         val transparentChatStatus=composePage==Page.CHAT&&safePrefBoolean("experimental_top_bar_transparent",false)
         val activeChat=selectedChat.takeIf{composePage==Page.CHAT}
@@ -1393,6 +1410,7 @@ class ComposeActivity : MainActivity() {
         composePage == Page.STICKER_RESOURCES -> composePage = stickerResourcesBackPage
         composePage == Page.DESKTOP_PET -> composePage = Page.MAIN
         composePage == Page.REALITY_AWARENESS -> composePage = Page.MAIN
+        composePage == Page.MARKET -> composePage = Page.MAIN
         composePage == Page.EXPERIMENTAL -> composePage = Page.MAIN
         composePage == Page.WEIXIN_LINK -> composePage = Page.EXPERIMENTAL
         composePage == Page.QQ_BOT -> composePage = Page.EXPERIMENTAL
@@ -1411,7 +1429,7 @@ class ComposeActivity : MainActivity() {
       }
     }
 
-    val glassUi = safePrefBoolean("experimental_glass_ui",false)
+    val glassUi = safePrefBoolean("experimental_glass_ui",true)
     Surface(Modifier.fillMaxSize(),color=if(glassUi)Color.Transparent else MaterialTheme.colorScheme.background,contentColor=MaterialTheme.colorScheme.onBackground) {
       val backdrop = if(glassUi) Modifier.background(MaterialTheme.colorScheme.background) else Modifier
       Box(Modifier.fillMaxSize().then(backdrop)) {
@@ -1500,6 +1518,7 @@ class ComposeActivity : MainActivity() {
           Page.BACKUP -> BackupPage()
           Page.STICKER_RESOURCES -> StickerResourcesPage()
           Page.REALITY_AWARENESS -> RealityAwarenessPage()
+          Page.MARKET -> MarketplacePage()
           Page.EXPERIMENTAL -> ExperimentalPage()
           Page.DESKTOP_PET -> DesktopPetPage()
           Page.WEIXIN_LINK -> WeixinLinkPage()
@@ -1557,9 +1576,11 @@ class ComposeActivity : MainActivity() {
 
   @Composable
   private fun ShiYuBottomBar(selected: Int, enabled: Boolean, onSelect: (Int) -> Unit) {
-    val glassUi=prefs.getBoolean("experimental_glass_ui",false)
+    val glassUi=prefs.getBoolean("experimental_glass_ui",true)
+    // An elevated translucent surface exposes its shadow behind the navigation labels.
+    val containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (glassUi) .56f else 1f)
     Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
-      Surface(Modifier.fillMaxWidth(), RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface.copy(alpha=if(glassUi).56f else .64f), border=BorderStroke(1.dp,MaterialTheme.colorScheme.outline.copy(alpha=if(glassUi).48f else .34f)), shadowElevation = if(glassUi)0.dp else 5.dp) {
+      Surface(Modifier.fillMaxWidth(), RoundedCornerShape(20.dp), color = containerColor, border=BorderStroke(1.dp,MaterialTheme.colorScheme.outline.copy(alpha=if(glassUi).48f else .34f)), shadowElevation = if(glassUi)0.dp else 5.dp) {
         Row(Modifier.fillMaxWidth().height(58.dp), verticalAlignment = Alignment.CenterVertically) {
           val labels = if(englishUi())listOf("Chats","Characters","Moments","Me")else listOf("对话", "角色", "朋友圈", "我的")
           val icons = listOf(Icons.Outlined.Forum, Icons.Outlined.Style, Icons.Outlined.Collections, Icons.Outlined.Tune)
@@ -2013,6 +2034,7 @@ class ComposeActivity : MainActivity() {
       item { RecommendCard() }
       item { MenuGroup(ui("常用功能","Quick access"), listOf(
         MenuEntry(Icons.Outlined.Nightlight,ui("哄睡故事","Bedtime stories"),ui("编辑故事并让角色循环读给你听","Edit stories with looped narration")){composePage=Page.STORIES},
+        MenuEntry(Icons.Outlined.Storefront,ui("时遇市场","ShiYu Market"),ui("官方主题、工具插件与本地安装","Official themes, tool plugins and local packages")){composePage=Page.MARKET},
         MenuEntry(Icons.Outlined.QueueMusic,ui("网易云音乐","NetEase Cloud Music"),ui("搜索歌曲、选择私聊会话并和当前角色一起听","Search songs, choose a private chat, and listen with its character")){musicBackPage=Page.MAIN;composePage=Page.MUSIC},
         MenuEntry(Icons.Outlined.SportsEsports,ui("游戏房","Game room"),ui("五子棋、井字棋和抽鬼牌","Gomoku, tic-tac-toe and cards")){composePage=Page.WORLD_GAMES},
         MenuEntry(Icons.Outlined.Backup,ui("备份与恢复","Backup & restore"),ui("立即导出或恢复全部本地数据","Export or restore local data")){composePage=Page.BACKUP},
@@ -2645,6 +2667,7 @@ class ComposeActivity : MainActivity() {
       MenuEntry(Icons.Outlined.PendingActions,ui("生成任务","Generation tasks"),ui("正在生成的回复与最近记录","Active generations and recent history")){composePage=Page.GENERATION_TASKS},
       MenuEntry(Icons.Outlined.RecordVoiceOver,ui("语音模型","Voice models"),ui("TTS、语音识别、音色与语速","TTS, speech recognition, voice and speed")){ttsBackPage=Page.SETTINGS_SEARCH;composePage=Page.TTS},
       MenuEntry(Icons.Outlined.Palette,ui("外观与动画","Appearance & motion"),ui("主题、聊天背景、气泡、帧率与页面过渡","Theme, chat background, bubbles and transitions")){composePage=Page.APPEARANCE},
+      MenuEntry(Icons.Outlined.Storefront,ui("时遇市场","ShiYu Market"),ui("官方主题、受限工具插件、本地安装与更新","Official themes, sandboxed tool plugins, local installs and updates")){composePage=Page.MARKET},
       MenuEntry(Icons.Outlined.Language,ui("语言","Language"),ui("跟随系统、简体中文或 English","System default, Simplified Chinese or English")){composePage=Page.LANGUAGE},
       MenuEntry(Icons.Outlined.Public,ui("现实感知增强","Reality awareness"),ui("当前日期、时间与时区","Current date, time and time zone")){composePage=Page.REALITY_AWARENESS},
       MenuEntry(Icons.Outlined.Pets,ui("桌宠模式","Desktop pet"),ui("悬浮角色、语音回复、Live2D 与屏幕互动","Floating character, voice, Live2D and screen actions")){composePage=Page.DESKTOP_PET},
@@ -3554,7 +3577,7 @@ ${history.joinToString("\n"){"${if(it.role=="user")"用户" else "角色"}：${i
     var crashProtection by remember{mutableStateOf(CrashProtection.isEnabled(this@ComposeActivity))}
     var inputGlass by remember{mutableStateOf(prefs.getBoolean("experimental_input_glass",false))}
     var transparentTop by remember{mutableStateOf(prefs.getBoolean("experimental_top_bar_transparent",false))}
-    var globalGlass by remember{mutableStateOf(prefs.getBoolean("experimental_glass_ui",false))}
+    var globalGlass by remember{mutableStateOf(prefs.getBoolean("experimental_glass_ui",true))}
     var glassOpacity by remember{mutableFloatStateOf(prefs.getInt("experimental_glass_opacity",78).toFloat())}
     val crashRecords=remember(uiRevision){CrashProtection.records(this@ComposeActivity)}
     fun persistVisuals(){prefs.edit().putBoolean("experimental_input_glass",inputGlass).putBoolean("experimental_top_bar_transparent",transparentTop).putBoolean("experimental_glass_ui",globalGlass).putInt("experimental_glass_opacity",glassOpacity.toInt()).apply();uiRevision++}
@@ -4020,6 +4043,29 @@ ${history.joinToString("\n"){"${if(it.role=="user")"用户" else "角色"}：${i
   }
 
   @Composable
+  private fun MarketplacePage(){
+    val repository=remember{MarketplaceRepository(this,prefs)}
+    fun applyTheme(theme:MarketTheme):String?=runCatching{
+      val values=sanitizeMarketThemeValues(theme.values);require(values.length()>0){"主题没有可应用的安全配置"}
+      val complete=JSONObject();appearanceConfigDefaults.forEach{(key,value)->complete.put(key,value)};values.keys().forEach{key->complete.put(key,values.get(key))}
+      val previous=appearanceConfigJson()
+      importAppearanceConfig(JSONObject().put("format","shiyu_appearance").put("version",1).put("values",complete).toString())
+      repository.markThemeActive(theme,previous);toast("已应用主题：${theme.name}");recreate();null
+    }.getOrElse{it.message?:"主题应用失败"}
+    fun resetTheme():String?=runCatching{
+      val previous=appearanceConfigJson();val values=JSONObject();appearanceConfigDefaults.forEach{(key,value)->values.put(key,value)}
+      repository.saveAppearanceRollback(previous)
+      importAppearanceConfig(JSONObject().put("format","shiyu_appearance").put("version",1).put("values",values).toString())
+      repository.clearActiveTheme();toast("已恢复默认外观");recreate();null
+    }.getOrElse{it.message?:"恢复默认主题失败"}
+    fun rollbackTheme():String?=runCatching{
+      val previous=repository.previousAppearance()?:error("还没有可回滚的主题")
+      importAppearanceConfig(previous.toString());repository.clearActiveTheme();toast("已回滚上一套外观");recreate();null
+    }.getOrElse{it.message?:"主题回滚失败"}
+    MarketplaceScreen(repository,::applyTheme,::resetTheme,::rollbackTheme,onBack={composePage=Page.MAIN}){uiRevision++}
+  }
+
+  @Composable
   private fun AppearancePage(themeMode: Int, setTheme: (Int) -> Unit,themeStyle:Int,setThemeStyle:(Int)->Unit) {
     var bubbleFont by remember { mutableFloatStateOf(prefs.getInt("chat_font_size",15).toFloat()) }
     var bubbleSpacing by remember { mutableFloatStateOf(prefs.getInt("chat_bubble_spacing",8).toFloat()) }
@@ -4029,6 +4075,7 @@ ${history.joinToString("\n"){"${if(it.role=="user")"用户" else "角色"}：${i
     val importAppearance=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->if(uri!=null)runCatching{String(bytes(contentResolver.openInputStream(uri)),Charsets.UTF_8)}.onSuccess{raw->runCatching{importAppearanceConfig(raw)}.onSuccess{toast("外观配置已导入，正在应用");recreate()}.onFailure{toast("导入失败：${it.message}")}}.onFailure{toast("读取失败：${it.message}")}}
     DetailScaffold("外观与动画") {
       item { InfoBanner(Icons.Outlined.ColorLens, "时遇风格", "珊瑚色表达情感，青绿色强调操作；深浅模式会同步系统状态栏。") }
+      item{SettingButton(Icons.Outlined.Storefront,"主题市场","从官方源安装主题，或导入本地外观配置"){composePage=Page.MARKET}}
       item{SectionTitle("分享与迁移")}
       item{Surface(shape=RoundedCornerShape(14.dp),color=MaterialTheme.colorScheme.surface){Column(Modifier.fillMaxWidth().padding(14.dp)){Text("我的外观配置",fontWeight=FontWeight.Medium);Text("包含主题、聊天背景颜色、气泡、字号、布局、玻璃效果与刷新率；不包含背景图片和聊天数据。",Modifier.padding(top=3.dp,bottom=11.dp),fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(7.dp)){OutlinedButton(onClick={pendingExport=appearanceConfigJson().toString(2);exportAppearance.launch("shiyu-appearance.json")},Modifier.weight(1f),contentPadding=PaddingValues(horizontal=7.dp)){Icon(Icons.Outlined.FileDownload,null,Modifier.size(17.dp));Spacer(Modifier.width(5.dp));Text("导出")};OutlinedButton(onClick={importAppearance.launch(arrayOf("application/json","text/plain","*/*"))},Modifier.weight(1f),contentPadding=PaddingValues(horizontal=7.dp)){Icon(Icons.Outlined.FileOpen,null,Modifier.size(17.dp));Spacer(Modifier.width(5.dp));Text("导入")};Button(onClick={shareAppearanceConfig()},Modifier.weight(1f),contentPadding=PaddingValues(horizontal=7.dp)){Icon(Icons.Outlined.Share,null,Modifier.size(17.dp));Spacer(Modifier.width(5.dp));Text("分享")}}}}}
       item { SectionTitle("主题模式") }
