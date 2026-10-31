@@ -49,7 +49,11 @@ public class MainActivity extends androidx.activity.ComponentActivity {
     java.io.File voiceRecordingFile;
     volatile long voiceRecordingSession;
     final java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(4);
-    final java.util.concurrent.ExecutorService groupPool = java.util.concurrent.Executors.newFixedThreadPool(2);
+    final java.util.concurrent.ExecutorService groupPool = java.util.concurrent.Executors.newCachedThreadPool(r -> {
+        java.lang.Thread thread = new java.lang.Thread(r, "shiyu-group-reply");
+        thread.setDaemon(true);
+        return thread;
+    });
     final java.util.concurrent.ExecutorService gamePool = java.util.concurrent.Executors.newFixedThreadPool(2);
     final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
     java.lang.String speechText = "";
@@ -67,6 +71,7 @@ public class MainActivity extends androidx.activity.ComponentActivity {
     final java.util.concurrent.ConcurrentHashMap<java.lang.String, java.util.ArrayDeque<java.lang.String>> queuedMentionTargets = new java.util.concurrent.ConcurrentHashMap<>();
     final java.util.concurrent.ConcurrentLinkedQueue<java.lang.String> crossChatQueue = new java.util.concurrent.ConcurrentLinkedQueue<>();
     final java.util.concurrent.ConcurrentHashMap<java.lang.String, java.lang.String> groupGenerationTokens = new java.util.concurrent.ConcurrentHashMap<>();
+    final java.util.concurrent.ConcurrentHashMap<java.lang.String, java.util.Set<java.net.HttpURLConnection>> groupActiveRequests = new java.util.concurrent.ConcurrentHashMap<>();
     final java.util.concurrent.ConcurrentHashMap<java.lang.String, java.lang.String> generationTokens = new java.util.concurrent.ConcurrentHashMap<>();
     final java.util.concurrent.ConcurrentHashMap<java.lang.String, java.lang.String> generationTaskIds = new java.util.concurrent.ConcurrentHashMap<>();
     final java.util.concurrent.ConcurrentHashMap<java.lang.String, com.tniany.shiyu.MainActivity.ImageGenerationHandle> imageGenerationHandles = new java.util.concurrent.ConcurrentHashMap<>();
@@ -122,6 +127,50 @@ public class MainActivity extends androidx.activity.ComponentActivity {
         }
         this.sendingChatId = "";
         this.prefs.edit().remove("active_generation_until").apply();
+    }
+
+    boolean isGroupGenerationActive(java.lang.String chatId, java.lang.String token) {
+        return chatId != null && token != null && !token.isEmpty()
+            && token.equals(this.groupGenerationTokens.get(chatId));
+    }
+
+    void registerGroupRequest(java.lang.String chatId, java.lang.String token, java.net.HttpURLConnection connection) throws java.io.InterruptedIOException {
+        if (!isGroupGenerationActive(chatId, token)) {
+            connection.disconnect();
+            throw new java.io.InterruptedIOException("stopped");
+        }
+        java.util.Set<java.net.HttpURLConnection> requests = this.groupActiveRequests.computeIfAbsent(
+            chatId, ignored -> java.util.concurrent.ConcurrentHashMap.newKeySet());
+        requests.add(connection);
+        if (!isGroupGenerationActive(chatId, token)) {
+            releaseGroupRequest(chatId, connection);
+            connection.disconnect();
+            throw new java.io.InterruptedIOException("stopped");
+        }
+    }
+
+    void releaseGroupRequest(java.lang.String chatId, java.net.HttpURLConnection connection) {
+        java.util.Set<java.net.HttpURLConnection> requests = this.groupActiveRequests.get(chatId);
+        if (requests == null) {
+            return;
+        }
+        requests.remove(connection);
+        if (requests.isEmpty()) {
+            this.groupActiveRequests.remove(chatId, requests);
+        }
+    }
+
+    void cancelGroupRequests(java.lang.String chatId) {
+        java.util.Set<java.net.HttpURLConnection> requests = this.groupActiveRequests.remove(chatId);
+        if (requests == null) {
+            return;
+        }
+        for (java.net.HttpURLConnection request : requests) {
+            try {
+                request.disconnect();
+            } catch (java.lang.Exception ignored) {
+            }
+        }
     }
 
     static final class ImageGenerationHandle {
@@ -414,6 +463,9 @@ public class MainActivity extends androidx.activity.ComponentActivity {
         cancelOfflineVoiceRecognition();
         this.speech.release();
         this.pool.shutdownNow();
+        for (java.lang.String chatId : this.groupActiveRequests.keySet()) {
+            cancelGroupRequests(chatId);
+        }
         this.groupPool.shutdownNow();
         this.gamePool.shutdownNow();
         super.onDestroy();
@@ -2446,10 +2498,24 @@ public class MainActivity extends androidx.activity.ComponentActivity {
         com.tniany.shiyu.MainActivity.RoleActionCommand parsedActions;
         com.tniany.shiyu.MainActivity.RoleActionCommand parsedActions2 = null;
         try {
-            com.tniany.shiyu.MainActivity.RoleActionCommand actions = parseRoleActionCommands(completeGroupReply(chat, snapshot, target));
+            if (!isGroupGenerationActive(chat.id, token)) {
+                return;
+            }
+            java.lang.String generated = completeGroupReply(chat, snapshot, target, token, "");
+            com.tniany.shiyu.MainActivity.RoleActionCommand actions = parseRoleActionCommands(generated);
+            int toolRetries = 0;
+            while (!roleMcpEnabled(chat) && !actions.mcpCalls.isEmpty() && toolRetries < 2
+                && isGroupGenerationActive(chat.id, token)) {
+                toolRetries++;
+                generated = completeGroupReply(chat, snapshot, target, token, generated);
+                actions = parseRoleActionCommands(generated);
+            }
             resolveRoleMusicMessages(actions.messages);
             parsedActions2 = actions;
             java.lang.String body2 = actions.text;
+            if (!roleMcpEnabled(chat) && !actions.mcpCalls.isEmpty() && body2.trim().isEmpty()) {
+                body2 = "当前对话已关闭角色工具与 MCP 调用，角色未能生成普通回复，请重试。";
+            }
             body = body2;
             failure = null;
             parsedActions = parsedActions2;
@@ -2667,6 +2733,17 @@ public class MainActivity extends androidx.activity.ComponentActivity {
     }
 
     java.lang.String completeGroupReply(com.tniany.shiyu.MainActivity.Chat chat, java.util.List<com.tniany.shiyu.MainActivity.Msg> messages, com.tniany.shiyu.MainActivity.Card card) throws java.lang.Exception {
+        return completeGroupReply(chat, messages, card, this.groupGenerationTokens.get(chat.id), "");
+    }
+
+    java.lang.String completeGroupReply(com.tniany.shiyu.MainActivity.Chat chat, java.util.List<com.tniany.shiyu.MainActivity.Msg> messages, com.tniany.shiyu.MainActivity.Card card, java.lang.String rejectedToolReply) throws java.lang.Exception {
+        return completeGroupReply(chat, messages, card, this.groupGenerationTokens.get(chat.id), rejectedToolReply);
+    }
+
+    java.lang.String completeGroupReply(com.tniany.shiyu.MainActivity.Chat chat, java.util.List<com.tniany.shiyu.MainActivity.Msg> messages, com.tniany.shiyu.MainActivity.Card card, java.lang.String token, java.lang.String rejectedToolReply) throws java.lang.Exception {
+        if (!isGroupGenerationActive(chat.id, token)) {
+            throw new java.io.InterruptedIOException("stopped");
+        }
         java.util.ArrayList<com.tniany.shiyu.MainActivity.Msg> context = new java.util.ArrayList<>();
         for (com.tniany.shiyu.MainActivity.Msg source : messages) {
             com.tniany.shiyu.MainActivity.Msg copy = new com.tniany.shiyu.MainActivity.Msg(source.role, source.body);
@@ -2695,7 +2772,13 @@ public class MainActivity extends androidx.activity.ComponentActivity {
             promptCard.persona += "\n长期记忆：\n" + memories;
         }
         context.add(new com.tniany.shiyu.MainActivity.Msg("user", "请只以 " + card.name + " 的身份回应刚才同时 @ 你的消息。"));
-        return complete(context, promptCard);
+        if (rejectedToolReply != null && !rejectedToolReply.isEmpty()) {
+            com.tniany.shiyu.MainActivity.Msg rejected = new com.tniany.shiyu.MainActivity.Msg("assistant", rejectedToolReply);
+            rejected.speakerCardId = card.id;
+            context.add(rejected);
+            context.add(new com.tniany.shiyu.MainActivity.Msg("system", "当前对话已关闭角色工具与 MCP 调用。不要输出 [调用工具：...]，不要假装调用或声称使用过任何工具；请只依据已有对话，以角色身份正常回复。"));
+        }
+        return complete(context, promptCard, chat.id, token);
     }
 
     void queueMentionedReplies(com.tniany.shiyu.MainActivity.Chat chat, java.util.List<com.tniany.shiyu.MainActivity.Card> targets) {
@@ -3510,6 +3593,7 @@ public class MainActivity extends androidx.activity.ComponentActivity {
         this.queuedReplyTargets.remove(stoppedChatId);
         this.queuedMentionTargets.remove(stoppedChatId);
         this.groupGenerationTokens.remove(stoppedChatId);
+        cancelGroupRequests(stoppedChatId);
         this.generationTokens.remove(stoppedChatId);
         java.lang.String stoppedTask = this.generationTaskIds.remove(stoppedChatId);
         if (stoppedTask != null) {
@@ -3549,6 +3633,7 @@ public class MainActivity extends androidx.activity.ComponentActivity {
             this.queuedReplyTargets.remove(chat.id);
             this.queuedMentionTargets.remove(chat.id);
             this.groupGenerationTokens.remove(chat.id);
+            cancelGroupRequests(chat.id);
             this.generationTokens.remove(chat.id);
             chat.messages.removeIf(new java.util.function.Predicate() { // from class: com.tniany.shiyu.MainActivity$$ExternalSyntheticLambda68
                 @Override // java.util.function.Predicate
@@ -6684,13 +6769,20 @@ public class MainActivity extends androidx.activity.ComponentActivity {
     }
 
     java.lang.String complete(java.util.List<com.tniany.shiyu.MainActivity.Msg> ms, com.tniany.shiyu.MainActivity.Card card) throws java.lang.Exception {
+        return complete(ms, card, null, null);
+    }
+
+    java.lang.String complete(java.util.List<com.tniany.shiyu.MainActivity.Msg> ms, com.tniany.shiyu.MainActivity.Card card, java.lang.String groupChatId, java.lang.String groupToken) throws java.lang.Exception {
         int retries = this.prefs.getBoolean("generation_auto_retry", true) ? java.lang.Math.max(1, java.lang.Math.min(5, this.prefs.getInt("generation_auto_retry_count", 2))) : 0;
         java.lang.Exception last = null;
         for (int attempt = 0; attempt <= retries; attempt++) {
             try {
-                return completeOnce(ms, card);
+                return completeOnce(ms, card, groupChatId, groupToken);
             } catch (java.lang.Exception error) {
                 last = error;
+                if (groupChatId != null && !isGroupGenerationActive(groupChatId, groupToken)) {
+                    throw new java.io.InterruptedIOException("stopped");
+                }
                 if (attempt >= retries || !shouldRetryGeneration(error)) {
                     throw error;
                 }
@@ -6704,10 +6796,24 @@ public class MainActivity extends androidx.activity.ComponentActivity {
     }
 
     java.lang.String completeOnce(java.util.List<com.tniany.shiyu.MainActivity.Msg> ms, com.tniany.shiyu.MainActivity.Card card) throws java.lang.Exception {
+        return completeOnce(ms, card, null, null);
+    }
+
+    java.lang.String completeOnce(java.util.List<com.tniany.shiyu.MainActivity.Msg> ms, com.tniany.shiyu.MainActivity.Card card, java.lang.String groupChatId, java.lang.String groupToken) throws java.lang.Exception {
+        if (groupChatId != null && !isGroupGenerationActive(groupChatId, groupToken)) {
+            throw new java.io.InterruptedIOException("stopped");
+        }
         if (localInferenceEnabled()) {
-            return completeWithLocalModel(null, ms, card);
+            java.lang.String result = completeWithLocalModel(null, ms, card);
+            if (groupChatId != null && !isGroupGenerationActive(groupChatId, groupToken)) {
+                throw new java.io.InterruptedIOException("stopped");
+            }
+            return result;
         }
         java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(endpoint()).openConnection();
+        if (groupChatId != null) {
+            registerGroupRequest(groupChatId, groupToken, c);
+        }
         try {
             c.setRequestMethod("POST");
             c.setConnectTimeout(10000);
@@ -6759,6 +6865,12 @@ public class MainActivity extends androidx.activity.ComponentActivity {
                 if (out.isEmpty()) {
                     throw new java.io.IOException("回复为空");
                 }
+                if (groupChatId != null && !isGroupGenerationActive(groupChatId, groupToken)) {
+                    throw new java.io.InterruptedIOException("stopped");
+                }
+                if (groupChatId != null) {
+                    releaseGroupRequest(groupChatId, c);
+                }
                 c.disconnect();
                 return out;
             } catch (java.lang.Throwable th) {
@@ -6774,6 +6886,9 @@ public class MainActivity extends androidx.activity.ComponentActivity {
                 }
             }
         } catch (java.lang.Throwable th3) {
+            if (groupChatId != null) {
+                releaseGroupRequest(groupChatId, c);
+            }
             c.disconnect();
             throw th3;
         }
