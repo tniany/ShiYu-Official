@@ -4,8 +4,8 @@ import test from "node:test";
 import {
   onRequestGet as getDownloads,
   recordSiteDownload,
-} from "../../build/shiyu-official-096/functions/api/downloads.js";
-import officialSite from "../../build/shiyu-official-096/_worker.js";
+} from "../../build/shiyu-official-0961/functions/api/downloads.js";
+import officialSite from "../../build/shiyu-official-0961/_worker.js";
 
 function createDatabase(initial = {}) {
   const counters = new Map(Object.entries(initial));
@@ -60,7 +60,7 @@ test("official download stats combine website redirects and GitHub assets", asyn
   globalThis.fetch = async () => new Response(JSON.stringify([
     {
       assets: [
-        { name: "shiyu-0.9.6.apk", download_count: 25 },
+        { name: "shiyu-0.9.6.1.apk", download_count: 25 },
         { name: "Shiyu-0.2.7-win-x64-Setup.exe", download_count: 16 },
         { name: "Shiyu-0.2.7-win-x64-Setup.exe.blockmap", download_count: 99 },
         { name: "SHA256SUMS.txt", download_count: 200 },
@@ -79,6 +79,8 @@ test("official download stats combine website redirects and GitHub assets", asyn
     assert.equal(data.website_downloads, 7);
     assert.equal(data.github_asset_downloads, 41);
     assert.equal(data.total_downloads, 48);
+    assert.equal(data.version, "0.9.6.1");
+    assert.equal(data.release_url, "https://github.com/tniany/ShiYu-Official/releases/tag/v0.9.6.1");
     assert.equal(db.counters.get("github_android_downloads"), 25);
     assert.equal(db.counters.get("github_windows_downloads"), 16);
   } finally {
@@ -97,7 +99,7 @@ test("official site records each platform before redirecting to GitHub", async (
     { DB: db },
   );
   assert.equal(response.status, 302);
-  assert.equal(response.headers.get("Location"), "https://github.com/tniany/ShiYu-Official/releases/tag/v0.9.6");
+  assert.equal(response.headers.get("Location"), "https://github.com/tniany/ShiYu-Official/releases/tag/v0.9.6.1");
   assert.equal(db.counters.get("windows_downloads"), 4);
 
   const head = await officialSite.fetch(
@@ -106,4 +108,12 @@ test("official site records each platform before redirecting to GitHub", async (
   );
   assert.equal(head.status, 302);
   assert.equal(db.counters.get("android_downloads"), 7);
+
+  const android = await officialSite.fetch(
+    new Request("https://shiy.tniay.top/downloads/shiyu-0.9.6.1.apk?v=63", { method: "GET" }),
+    { DB: db },
+  );
+  assert.equal(android.status, 302);
+  assert.equal(android.headers.get("Location"), "https://github.com/tniany/ShiYu-Official/releases/tag/v0.9.6.1");
+  assert.equal(db.counters.get("android_downloads"), 8);
 });

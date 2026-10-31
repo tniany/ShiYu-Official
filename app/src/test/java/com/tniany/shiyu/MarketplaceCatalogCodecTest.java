@@ -136,4 +136,21 @@ public class MarketplaceCatalogCodecTest {
         assertTrue(plugin.getRuntimePrefs().getBoolean("web_search_enabled"));
         assertFalse(plugin.getRuntimePrefs().has("unapproved_runtime_flag"));
     }
+
+    @Test
+    public void communityManifestCapabilitiesMapToReviewedRuntimePrefs() throws Exception {
+        String raw = "{"
+            + "\"format\":\"shiyu_market_catalog\","
+            + "\"source\":{\"id\":\"local\"},"
+            + "\"plugins\":[{"
+            + "\"id\":\"community.direct-manifest\",\"name\":\"直接导入\","
+            + "\"capabilities\":[\"time\",\"web_search\",\"unknown_host_api\"]"
+            + "}]}";
+
+        MarketPlugin plugin = MarketplaceCatalogCodec.INSTANCE.parse(raw, false).getPlugins().get(0);
+        assertTrue(plugin.getRuntimePrefs().getBoolean("agent_time_enabled"));
+        assertTrue(plugin.getRuntimePrefs().getBoolean("web_search_enabled"));
+        assertFalse(plugin.getRuntimePrefs().has("agent_music_enabled"));
+        assertFalse(plugin.getRuntimePrefs().has("unknown_host_api"));
+    }
 }

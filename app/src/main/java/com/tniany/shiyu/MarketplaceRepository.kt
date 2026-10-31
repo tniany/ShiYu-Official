@@ -181,7 +181,9 @@ internal object MarketplaceCatalogCodec {
     val id = safeIdentifier(item.optString("id"))
     val name = item.optString("name").trim()
     if (id.isEmpty() || name.isEmpty()) return null
-    val runtimePrefs = MarketplacePluginPolicy.sanitize(id, item.optJSONObject("runtimePrefs")) ?: return null
+    val runtimeSource = item.optJSONObject("runtimePrefs")
+      ?: runtimePrefsForCapabilities(item.optJSONArray("capabilities"))
+    val runtimePrefs = MarketplacePluginPolicy.sanitize(id, runtimeSource) ?: return null
     return MarketPlugin(
       id = id,
       name = name.take(60),
@@ -198,6 +200,20 @@ internal object MarketplaceCatalogCodec {
       sourceUrl = safeGitHubSource(item.optString("sourceUrl")),
       sourceRef = item.optString("sourceRef").trim().take(200)
     )
+  }
+
+  private fun runtimePrefsForCapabilities(array: JSONArray?): JSONObject? {
+    if (array == null || array.length() == 0) return null
+    val result = JSONObject()
+    for (index in 0 until array.length()) {
+      when (array.optString(index).trim()) {
+        "time" -> result.put("agent_time_enabled", true)
+        "music" -> result.put("agent_music_enabled", true)
+        "web_search" -> result.put("web_search_enabled", true)
+        "travel_guidance" -> result.put("agent_travel_enabled", true)
+      }
+    }
+    return result.takeIf { it.length() > 0 }
   }
 
   private fun strings(array: JSONArray?): List<String> {
@@ -350,11 +366,17 @@ internal class MarketplaceRepository(
 
   private fun importLocalPackage(raw: String, includePlugins: Boolean): MarketImportResult {
     val root = JSONObject(raw.removePrefix("\uFEFF"))
-    val parsed = when (root.optString("format")) {
-      MarketplaceCatalogCodec.FORMAT -> MarketplaceCatalogCodec.parse(wrapCatalog(root))
-      "shiyu_market_theme" -> MarketplaceCatalogCodec.parse(wrapTheme(root))
-      "shiyu_market_plugin" -> MarketplaceCatalogCodec.parse(wrapPlugin(root))
-      "shiyu_appearance" -> {
+    val format = root.optString("format")
+    val manifestKind = root.optString("kind").trim().lowercase()
+    val parsed = when {
+      format == MarketplaceCatalogCodec.FORMAT -> MarketplaceCatalogCodec.parse(wrapCatalog(root))
+      format == "shiyu_market_theme" -> MarketplaceCatalogCodec.parse(wrapTheme(root))
+      format == "shiyu_market_plugin" -> MarketplaceCatalogCodec.parse(wrapPlugin(root))
+      root.optInt("schema", 0) == 1 && manifestKind == "theme" ->
+        MarketplaceCatalogCodec.parse(wrapTheme(root))
+      root.optInt("schema", 0) == 1 && manifestKind == "plugin" ->
+        MarketplaceCatalogCodec.parse(wrapPlugin(root))
+      format == "shiyu_appearance" -> {
         val values = root.optJSONObject("values") ?: error("外观文件缺少 values")
         MarketplaceCatalogCodec.parse(wrapTheme(JSONObject()
           .put("id", "local-" + hash(raw))

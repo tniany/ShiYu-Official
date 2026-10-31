@@ -139,7 +139,9 @@ internal fun MarketplaceScreen(
   val localThemeIds = localThemes.mapTo(mutableSetOf()) { it.id }
   val canRollback = remember(localRevision) { repository.previousAppearance() != null }
   val allThemes = (catalog?.themes.orEmpty() + localThemes).distinctBy { it.id }
-  val allPlugins = catalog?.plugins.orEmpty().distinctBy { it.id }
+  val localPlugins = remember(localRevision, catalog) { repository.localPlugins() }
+  val localPluginIds = localPlugins.mapTo(mutableSetOf()) { it.id }
+  val allPlugins = (catalog?.plugins.orEmpty() + localPlugins).distinctBy { it.id }
   val sourceStatus = catalog?.source?.let {
     if (it.builtIn) "精选外观与实用工具，随时可用" else "已同步到最新精选内容"
   }.orEmpty()
@@ -212,7 +214,7 @@ internal fun MarketplaceScreen(
     }.onFailure { report("保存设置失败：${it.message ?: "未知错误"}", true) }
   }
 
-  fun importChosenTheme(uri: Uri?) {
+  fun importChosenPackage(uri: Uri?) {
     if (uri == null) return
     scope.launch {
       runCatching {
@@ -233,19 +235,21 @@ internal fun MarketplaceScreen(
             output.toString()
           }
         }
-        withContext(Dispatchers.IO) { repository.importLocalTheme(raw) }
+        withContext(Dispatchers.IO) { repository.importLocalPackage(raw) }
       }.onSuccess { result ->
         localRevision++
         onChanged()
-        report("已导入 ${result.themes.size} 个本地主题。本地主题未经官方审核，请确认来源可信")
+        report(
+          "已导入 ${result.themes.size} 个本地主题、${result.plugins.size} 个本地插件。本地内容未经官方审核，请确认来源可信"
+        )
       }.onFailure {
-        report("主题导入失败：${it.message ?: "文件格式无效"}", true)
+        report("本地包导入失败：${it.message ?: "文件格式无效"}", true)
       }
     }
   }
 
-  val themeImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-    importChosenTheme(uri)
+  val packageImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    importChosenPackage(uri)
   }
 
   Column(Modifier.fillMaxSize()) {
@@ -357,16 +361,18 @@ internal fun MarketplaceScreen(
         if (section == "themes") {
 
           item {
+            OutlinedButton(
+              onClick = { importPrompt = true },
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              Icon(Icons.Outlined.FileOpen, null, Modifier.size(17.dp))
+              Spacer(Modifier.width(6.dp))
+              Text("导入本地主题或插件", maxLines = 1)
+            }
+          }
+
+          item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-              OutlinedButton(
-                onClick = { importPrompt = true },
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = 7.dp)
-              ) {
-                Icon(Icons.Outlined.FileOpen, null, Modifier.size(17.dp))
-                Spacer(Modifier.width(5.dp))
-                Text("导入主题", maxLines = 1)
-              }
               OutlinedButton(
                 onClick = { onResetTheme()?.let { report("恢复默认失败：$it", true) } },
                 modifier = Modifier.weight(1f),
@@ -551,6 +557,17 @@ internal fun MarketplaceScreen(
             }
           }
         } else {
+          item {
+            OutlinedButton(
+              onClick = { importPrompt = true },
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              Icon(Icons.Outlined.FileOpen, null, Modifier.size(17.dp))
+              Spacer(Modifier.width(6.dp))
+              Text("导入本地主题或插件", maxLines = 1)
+            }
+          }
+
           if (plugins.isEmpty()) {
             item {
               MarketEmpty(Icons.Outlined.Extension, "没有匹配的插件", "检查关键词或刷新官方源")
@@ -560,6 +577,7 @@ internal fun MarketplaceScreen(
             val installed = plugin.id in installedPlugins
             val enabled = plugin.id in enabledPlugins
             val community = plugin.id.startsWith("community.")
+            val local = plugin.id in localPluginIds
             Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surface) {
               Column(Modifier.fillMaxWidth().padding(15.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -602,7 +620,7 @@ internal fun MarketplaceScreen(
                       }
                     }
                     Text(
-                      "${if (community) "社区审核 · " else ""}${plugin.category} · ${plugin.author} · v${plugin.version}",
+                      "${if (local) "本地导入 · " else if (community) "社区审核 · " else ""}${plugin.category} · ${plugin.author} · v${plugin.version}",
                       Modifier.padding(top = 2.dp),
                       fontSize = 11.sp,
                       color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -640,6 +658,21 @@ internal fun MarketplaceScreen(
                 if (plugin.sourceUrl.isNotBlank()) {
                   TextButton(onClick = { openSource(plugin.sourceUrl) }) {
                     Text("查看开源仓库")
+                  }
+                }
+                if (local) {
+                  TextButton(
+                    onClick = {
+                      runCatching { repository.deleteLocalPlugin(plugin) }
+                        .onSuccess {
+                          localRevision++
+                          onChanged()
+                          report("已移除本地插件：${plugin.name}")
+                        }
+                        .onFailure { report("移除失败：${it.message ?: "未知错误"}", true) }
+                    }
+                  ) {
+                    Text("移除本地导入")
                   }
                 }
                 if (plugin.settings.isNotEmpty()) {
@@ -729,7 +762,7 @@ internal fun MarketplaceScreen(
         item {
           Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 14.dp)) {
             Text(
-              "更多主题和经审核的社区插件会持续更新。安装主题后，可随时恢复默认外观或回滚上一套外观。",
+              "更多主题和经审核的社区插件会持续更新，也支持从本地导入可信的主题或插件包。安装后可随时停用、恢复默认外观或移除本地导入。",
               fontSize = 11.sp,
               lineHeight = 17.sp,
               color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -749,7 +782,7 @@ internal fun MarketplaceScreen(
       ),
       icon = { Icon(Icons.Outlined.Security, null) },
       title = {
-        Text("导入本地主题")
+        Text("导入本地主题或插件")
       },
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -758,7 +791,7 @@ internal fun MarketplaceScreen(
             fontWeight = FontWeight.Medium
           )
           Text(
-            "本地主题只会修改 App 已实现并审核的外观字段，不加载脚本、远程代码或插件。",
+            "本地主题只能修改已审核的外观字段；本地插件只能切换 App 已实现并审核的工具接口。两者都不会加载脚本或远程代码。",
             fontSize = 13.sp,
             lineHeight = 20.sp
           )
@@ -778,7 +811,7 @@ internal fun MarketplaceScreen(
           enabled = importCountdown == 0,
           onClick = {
             importPrompt = false
-            themeImporter.launch(arrayOf("application/json", "text/plain", "*/*"))
+            packageImporter.launch(arrayOf("application/json", "text/plain", "*/*"))
           }
         ) {
           Text(if (importCountdown > 0) "${importCountdown} 秒后可继续" else "选择文件")

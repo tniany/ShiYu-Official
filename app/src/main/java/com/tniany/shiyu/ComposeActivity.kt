@@ -944,6 +944,13 @@ class ComposeActivity : MainActivity() {
   private fun finishCommunityInvite(destination:Page=Page.MAIN){prefs.edit().putString("community_invite_version",BuildConfig.VERSION_NAME).apply();composePage=destination}
   private fun nextEntryPage():Page=when{!prefs.getBoolean("onboarding_done",false)->Page.ONBOARDING;prefs.getString("startup_loading_version","")!=BuildConfig.VERSION_NAME->Page.STARTUP_LOADING;prefs.getString("community_invite_version","")!=BuildConfig.VERSION_NAME->Page.COMMUNITY_INVITE;else->Page.MAIN}
   private fun finishStartupLoading(){prefs.edit().putString("startup_loading_version",BuildConfig.VERSION_NAME).apply();composePage=if(prefs.getString("community_invite_version","")!=BuildConfig.VERSION_NAME)Page.COMMUNITY_INVITE else Page.MAIN}
+  private fun openDiscordGroup():Boolean{
+    if(isFinishing||isDestroyed)return false
+    val url="https://discord.gg/kpGgDXpGg"
+    if(tryOpenWebLink(url))return true
+    copyText("Discord 群组链接",url)
+    return false
+  }
   private fun openQqGroup():Boolean{
     if(isFinishing||isDestroyed)return false
     val url="https://qm.qq.com/q/rfu5wNZqca"
@@ -4536,6 +4543,9 @@ ${history.joinToString("\n"){"${if(it.role=="user")"用户" else "角色"}：${i
       item { SettingButton(Icons.Outlined.Info,"当前版本","${BuildConfig.VERSION_NAME} · Android Compose"){} }
       item { SettingButton(Icons.Outlined.History,"更新历史","查看不同版本的新增内容与问题修复"){composePage=Page.UPDATE_HISTORY} }
       item { SettingButton(Icons.Outlined.Language,"时遇官网","shiy.tniay.top"){openWebLink("https://shiy.tniay.top/","无法打开时遇官网")} }
+      item { SettingButton(Icons.Outlined.Code,"开源仓库","github.com/tniany/ShiYu-Official · 点击打开"){openWebLink("https://github.com/tniany/ShiYu-Official","无法打开 GitHub")} }
+      item { SettingButton(Icons.Outlined.MenuBook,"插件与主题开发文档","web-shiy.tniay.top/market/docs · 点击打开"){openWebLink("https://web-shiy.tniay.top/market/docs","无法打开开发文档")} }
+      item { SettingButton(Icons.Outlined.Forum,"Discord 社区","discord.gg/kpGgDXpGg · 点击加入"){openDiscordGroup()} }
       item { Button(onClick={checking=true;checkForUpdates{checking=false}},Modifier.fillMaxWidth().height(48.dp)){if(checking)CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp)else Icon(Icons.Outlined.SystemUpdateAlt,null);Spacer(Modifier.width(8.dp));Text(if(checking)"正在检查更新" else "检查更新",maxLines=1,softWrap=false)} }
       if(updateVersion.isNotBlank())item { SettingButton(Icons.Outlined.NewReleases,"发现新版本 $updateVersion",updateUrl.ifBlank{"时遇官网"}){openWebLink(updateUrl.ifBlank{"https://shiy.tniay.top/"},"无法打开更新页面")} }
       item { SettingButton(Icons.Outlined.Gavel,"用户协议与使用条款","免费 App、第三方 API、隐私与内容规范"){termsBackPage=Page.ABOUT;composePage=Page.TERMS} }
