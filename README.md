@@ -10,6 +10,23 @@
 
 ![时遇产品展示](build/shiyu-official-0961/assets/hero-dfddcde54819456783eea1c62289486a.png)
 
+## 界面一览
+
+<table>
+  <tr>
+    <td align="center" width="33%"><a href="build/shiyu-official-0961/assets/screens-073/screen-characters.jpg"><img src="build/shiyu-official-0961/assets/screens-073/screen-characters.jpg" width="260" alt="时遇角色卡管理"></a><br><sub><b>角色卡管理</b></sub></td>
+    <td align="center" width="33%"><a href="build/shiyu-official-0961/assets/screens-073/screen-chat-generated-image.jpg"><img src="build/shiyu-official-0961/assets/screens-073/screen-chat-generated-image.jpg" width="260" alt="时遇沉浸聊天与角色生图"></a><br><sub><b>沉浸聊天与生图</b></sub></td>
+    <td align="center" width="33%"><a href="build/shiyu-official-0961/assets/screens-073/screen-moments.jpg"><img src="build/shiyu-official-0961/assets/screens-073/screen-moments.jpg" width="260" alt="时遇角色朋友圈"></a><br><sub><b>角色朋友圈</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="33%"><a href="build/shiyu-official-0961/assets/screens-073/screen-voice-reply.jpg"><img src="build/shiyu-official-0961/assets/screens-073/screen-voice-reply.jpg" width="260" alt="时遇语音回复设置"></a><br><sub><b>文字与语音回复</b></sub></td>
+    <td align="center" width="33%"><a href="build/shiyu-official-0961/assets/screens-073/screen-model-settings.jpg"><img src="build/shiyu-official-0961/assets/screens-073/screen-model-settings.jpg" width="260" alt="时遇模型与扩展设置"></a><br><sub><b>模型与扩展设置</b></sub></td>
+    <td align="center" width="33%"><a href="build/shiyu-official-0961/assets/screens-073/screen-local-data.jpg"><img src="build/shiyu-official-0961/assets/screens-073/screen-local-data.jpg" width="260" alt="时遇本地数据与备份"></a><br><sub><b>本地数据与备份</b></sub></td>
+  </tr>
+</table>
+
+更多真实界面可前往 [时遇官网](https://shiy.tniay.top/#preview) 查看。
+
 当前 Android 版本为 **0.9.6.1**，Windows 版本为 **0.2.7**。
 
 ## 产品入口
