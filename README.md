@@ -8,15 +8,15 @@
 
 时遇是一款面向 Android、Web 和 Windows 的角色扮演智能体聊天应用。你可以连接 OpenAI Chat Completions 兼容接口，导入角色卡，与角色聊天、分享动态，并使用语音、桌宠、音乐和扩展工具等功能。
 
-![时遇产品展示](build/shiyu-official-095/assets/hero-dfddcde54819456783eea1c62289486a.png)
+![时遇产品展示](build/shiyu-official-096/assets/hero-dfddcde54819456783eea1c62289486a.png)
 
-当前 Android 版本为 **0.9.5**，Windows 版本为 **0.2.7**。
+当前 Android 版本为 **0.9.6**，Windows 版本为 **0.2.7**。
 
 ## 产品入口
 
 - [产品官网](https://shiy.tniay.top/)
 - [Web 版](https://web-shiy.tniay.top/)
-- [Android 发布记录](https://github.com/tniany/shiyu-releases/releases)
+- [Android 发布记录](https://github.com/tniany/ShiYu-Official/releases)
 
 ## 项目组成
 
@@ -26,10 +26,12 @@
 | `web/` | Web 版应用源码与下载页面 |
 | `square-worker/` | Cloudflare Worker API、数据服务与下载传输 |
 | `desktop/` | Windows Electron 客户端源码 |
-| `build/shiyu-official-095/` | 当前官网部署源 |
+| `build/shiyu-official-096/` | 当前官网部署源 |
 | `release/` | 版本说明与历史发布资料 |
 
 APK、安装包及分片等二进制文件不在主仓库中长期保存。
+
+官网 Android 下载入口会记录下载点击，然后跳转到本期 GitHub Release；下载统计同时汇总官网跳转数和 Release 中 APK 的 `download_count`。
 
 ## 功能亮点
 
@@ -92,6 +94,10 @@ node --test square-worker/test/usage-open.test.mjs
 - Web 页面与交互位于 `web/`
 - 服务端接口与迁移位于 `square-worker/`
 - Windows 客户端位于 `desktop/`
-- 官网内容位于 `build/shiyu-official-095/`
+- 官网内容位于 `build/shiyu-official-096/`
 
 提交代码前请确认相关平台可以正常构建，并运行对应测试。
+
+## 许可证
+
+本项目采用 [PolyForm Noncommercial License 1.0.0](LICENSE)。允许个人学习、研究和其他非商业用途；未经商业授权不得用于商业用途。

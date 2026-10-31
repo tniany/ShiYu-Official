@@ -24,8 +24,8 @@ android {
         applicationId 'com.tniany.shiyu'
         minSdk 24
         targetSdk 33
-        versionCode 61
-        versionName '0.9.5'
+        versionCode 62
+        versionName '0.9.6'
     }
 
     compileOptions {

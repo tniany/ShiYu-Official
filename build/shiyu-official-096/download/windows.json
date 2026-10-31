@@ -1,0 +1,15 @@
+{
+  "version": "0.2.7",
+  "platform": "windows",
+  "arch": "x64",
+  "published_at": "2026-09-27",
+  "filename": "Shiyu-0.2.7-win-x64-Setup.exe",
+  "size": 114524161,
+  "sha256": "2f2f2578167b994b32484e63153fa66b61e828c1c3c717fb8c84a45bca1eb0ba",
+  "download_url": "https://web-shiy.tniay.top/downloads/windows/Shiyu-0.2.7-win-x64-Setup.exe",
+  "fallback_url": "https://github.com/tniany/ShiYu-Official/releases/download/v0.9.6/Shiyu-0.2.7-win-x64-Setup.exe",
+  "update_url": "https://web-shiy.tniay.top/downloads/windows/latest.yml",
+  "page_url": "https://shiy.tniay.top/download/",
+  "signed": false,
+  "minimum_os": "Windows 10"
+}

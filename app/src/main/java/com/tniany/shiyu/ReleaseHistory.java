@@ -23,7 +23,12 @@ public final class ReleaseHistory {
     }
   }
 
-  private static final List<Entry> FALLBACK=Collections.singletonList(
+  private static final List<Entry> FALLBACK=Arrays.asList(
+      new Entry("0.9.6","2026年10月31日",
+          "新增“时遇市场”，可以浏览、安装、应用主题与插件。",
+          "主题和插件可以提供自己的设置项，并支持从本地导入自定义主题。",
+          "玻璃材质默认开启，优化底部导航栏文字、主题应用、回滚和旧缓存淘汰。",
+          "修复停止群聊生成、关闭工具与 MCP 后仍继续请求或写入回复的问题。"),
       new Entry("0.7.8","2026年8月3日",
           "表情包聊天记录支持长按菜单，可直接删除对应记录。",
           "支持将其他聊天中的角色内容分享给当前角色。",
